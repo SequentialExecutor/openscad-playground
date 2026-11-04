@@ -85,7 +85,7 @@ export function export3MF(data: IndexedPolyhedron, extruderColors?: chroma.Color
                         '</mesh>',
                     '</object>',
                 '</resources>',
-                `<build p:UUID="${buildUuid}}">`,
+                `<build p:UUID="${buildUuid}">`,
                     `<item objectid="1" p:UUID="${objectUuid}"/>`,
                 '</build>',
             '</model>',

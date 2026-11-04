@@ -195,3 +195,43 @@ Available build commands:
 To retire a library, delete its entry from `libs-config.json` and add its name to `removedLibraries` there (name -> hint): scripts that still refer to it get OpenSCAD's usual missing-file warning plus that hint in the logs.
 
 Send us a PR, then once it's merged request an update to the hosted https://ochafik.com/openscad2 demo.
+
+## Forma3D Studio development
+
+The visual CAD foundation is available through **Forma3D Studio · Visual Design**
+in the existing editor, or the `?studio=1` query parameter. It supports primitive
+solids, transform gizmos, numeric editing, undo/redo, local project recovery and
+exact STL export. The full planned feature set is not yet implemented. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for the integration design,
+[FEATURES.md](FEATURES.md) for implemented versus planned functionality,
+[TESTING.md](TESTING.md) for commands, reproduced defects and build blockers,
+[USER_GUIDE.md](USER_GUIDE.md) for current usage, and
+[licensing notes](docs/forma3d/LICENSING.md) for distribution requirements.
+
+Foundation regression checks (after `npm ci` in both root and `server/`):
+
+```sh
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node tests/foundation-browser.mjs
+```
+
+
+To reproduce the visual workspace setup with Node 22 or newer:
+
+```sh
+PUPPETEER_SKIP_DOWNLOAD=true npm ci
+(cd server && npm ci)
+# NODE_USE_ENV_PROXY=1 is needed on Node 24 in the managed cloud network.
+NODE_USE_ENV_PROXY=1 npm run build:libs
+npm run build
+npm start
+```
+
+For automated visual workflows, with system Chromium installed:
+
+```sh
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js
+```
+
+Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.
+See [FEATURES.md](FEATURES.md) for the precise supported subset and limitations.

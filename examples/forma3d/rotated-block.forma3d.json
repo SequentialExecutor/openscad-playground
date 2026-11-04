@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "Untitled design",
+  "units": "mm",
+  "bodies": [
+    {
+      "id": "1c404c5a-bf42-403b-bb41-44d8624502fa",
+      "name": "Box",
+      "kind": "box",
+      "size": [
+        50,
+        30,
+        20
+      ],
+      "position": [
+        15,
+        0,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        90
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "visible": true,
+      "locked": false
+    }
+  ]
+}

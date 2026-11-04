@@ -10,6 +10,7 @@ import PanelSwitcher from './PanelSwitcher';
 import { ConfirmDialog } from 'primereact/confirmdialog';
 import CustomizerPanel from './CustomizerPanel';
 import WasmStatusBanner from './WasmStatusBanner';
+import { isMcpMode } from '../state/mcp-mode';
 
 /** The full UI: tab bar, editor / viewer / customizer panels and footer. */
 export default function FullLayout({viewerRef}: {viewerRef?: React.Ref<ViewerPanelHandle>}) {
@@ -58,6 +59,7 @@ export default function FullLayout({viewerRef}: {viewerRef?: React.Ref<ViewerPan
         flex: 1,
       }}>
       
+      {!isMcpMode() && <a href={`?studio=1${window.location.hash}`} style={{padding: "8px 14px", fontWeight: 600}}>Forma3D Studio · Visual Design ↗</a>}
       <PanelSwitcher />
 
       <WasmStatusBanner />

@@ -35,9 +35,15 @@ declare var BrowserFS: BrowserFSInterface
 
 // Start downloading and compiling the engine right away (not on `load`): it is on the critical path
 // to the first render.
-getSharedWasmModule();
+const visualStudio = new URLSearchParams(location.search).get('studio') === '1' && !isMcpMode();
+if (!visualStudio) getSharedWasmModule();
 
 window.addEventListener('load', async () => {
+  if (visualStudio) {
+    const {default: Studio} = await import('./studio/Studio');
+    ReactDOM.createRoot(document.getElementById('root')!).render(<Studio />);
+    return;
+  }
   const mcpMode = isMcpMode();
 
   registerCustomAppHeightCSSProperty();

@@ -1,0 +1,122 @@
+# Validation record
+
+Baseline: `d4552def6a9b047b016b321f31cdcdcb7e6cfd5b`, remote default `main`.
+Environment: Linux, Node 24.22.1, npm 11.9.0, system Chromium.
+Root/server dependencies use their lockfiles. The published network policy now
+allows `files.openscad.org`; the configured upstream WASM release downloaded
+successfully without disabling TLS or replacing checksums. The earlier HTTP 403
+and resulting missing-module build/type failures are resolved.
+
+## Foundation and document checks
+
+From the repository root, after installing root and server dependencies:
+
+```sh
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts
+npx --no-install tsc --noEmit
+node tests/foundation-browser.mjs
+```
+
+Seven Node tests passed: 3MF package geometry/relationships/UUIDs, actual
+customizer markup, document schema/ID validation, serialization, history and
+deterministic SCAD generation. The original customizer/UUID tests reproduced two
+failures before the fixes. Chromium customizer typing/reset passed independently.
+The UUID's extra brace was inside a quoted XML attribute: it invalidated the UUID
+value, rather than making the XML unparseable. Complete 3MF schema/slicer
+interoperability remains untested.
+
+## Browser workflows
+
+```sh
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js
+```
+
+The full development suite passed 54 tests with 26 conditionally skipped tests
+before the final import/cancellation cases were added. The original four-test
+baseline subset (default page, cube, valid GLB, syntax-error locations) also
+passed before visual implementation. Skipped tests are not counted as passing.
+
+Visual tests exercise real React controls and WebGL, raycast selection, actual
+pointer gizmo movement, transaction undo, Escape cancellation, numeric edits,
+visibility/locks, duplication/deletion, IndexedDB reload with stable IDs, project
+validation, orthographic mode, export cancellation/retry, and actual OpenSCAD
+worker-generated binary STL. A 50 × 30 × 20 mm box rotated 90° around Z exports
+with bounds (0, −25, 0) to (30, 25, 20) mm after translation. Every STL vertex
+is read back to check finite coordinates and bounds. The emitted sample project
+and mesh are in `examples/forma3d`.
+
+Downloads are captured from the application's actual blob URL in the test browser;
+these tests do not substitute generated source or a Three.js mesh for kernel
+output. The pointer test projects the real world-space gizmo into screen space
+and sends browser mouse events. Browser fixture selection was corrected after an
+initial triple-click appended text rather than selecting the numeric field.
+
+## Production and MCP
+
+```sh
+npm run build
+(cd server && npm run build)
+(cd server && PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm test)
+```
+
+The production baseline and first visual build passed with webpack asset-size
+warnings. `three` and its types are pinned to 0.187.0. Root dev dependency
+`esbuild@0.28.2` is declared because the existing MCP cross-origin browser test
+requires it from the root; previously this check failed with MODULE_NOT_FOUND
+once a real dist build became available. No assertion was disabled to fix it.
+
+## Limits
+
+Chromium is the only browser engine verified so far. A second engine, full mesh
+topology/slicer compatibility, context-loss recovery, performance benchmarks,
+feature graph/boolean/sketch acceptance scenarios A–G, and imported mesh roundtrip
+are not complete. No guarantee of printability is inferred from passing tests.
+The native persistence format currently holds primitive documents as JSON, not
+ZIP containers with arbitrary assets. TESTING.md distinguishes historical,
+current and skipped outcomes; a successful compile alone is not geometry proof.
+
+## Final production validation
+
+The final source passed `npm run build` and `npx --no-install tsc --noEmit`.
+The expanded visual suite passed all 5 tests in development. A focused production
+run then passed 12 tests across 3 suites: 5 visual workflows, 4 original Code-mode
+rendering/diagnostic checks, and 3 bundle checks; 45 other tests were excluded by
+the explicit test-name filter, rather than executed and passed.
+
+Production validation served the actual `dist` directory with the repository's
+`serve` dependency on port 3000 and used this configuration outside the checkout:
+
+```js
+module.exports = {
+  launch: { headless: true, args: ['--no-sandbox'] },
+  server: {
+    command: 'npx --no-install serve --listen 3000 .',
+    port: 3000,
+    launchTimeout: 30000,
+  },
+};
+```
+
+With that file saved as `/tmp/forma-prod-puppeteer.cjs`, the command was:
+
+```sh
+NODE_ENV=production E2E_BASE_URL=http://localhost:3000/dist/ \
+JEST_PUPPETEER_CONFIG=/tmp/forma-prod-puppeteer.cjs \
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+npm run test:e2e -- --runInBand tests/studio.test.js tests/e2e.test.js tests/bundle.test.js \
+  --testNamePattern='Forma3D visual foundation|load the default page|can render cube|displayed model is a valid GLB|syntax error markers|bundle'
+```
+
+The complete MCP suite passed 115 non-browser checks plus its cross-origin
+browser render/screenshot scenario (28 asset requests, no leaked requests or CSP
+violations). It ran against the first visual production build. The final unit
+run passed all 7 tests, and the standalone Chromium customizer check passed.
+`git diff --check` passed. Webpack's asset-size warnings remain; they are not
+compilation errors.
+
+The expanded tests initially exposed a stale autosave status after a new edit:
+“Saved locally” could remain visible until the next write completed. This caused
+navigation hooks to move on while the before-unload protection was still active.
+The application now explicitly reports “Saving locally…” for the pending revision;
+the rerun passed. Numeric Escape cancellation and rename undo were also checked.
