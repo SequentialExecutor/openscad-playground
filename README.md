@@ -200,8 +200,8 @@ Send us a PR, then once it's merged request an update to the hosted https://ocha
 
 The visual CAD foundation is available through **Forma3D Studio · Visual Design**
 in the existing editor, or the `?studio=1` query parameter. It supports primitive
-solids, transform gizmos, numeric editing, undo/redo, local project recovery and
-exact STL export. The full planned feature set is not yet implemented. See
+solids, transform gizmos, editable boolean features, numeric editing, undo/redo,
+native projects, local recovery, exact STL export and worker-based mesh analysis. The full planned feature set is not yet implemented. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the integration design,
 [FEATURES.md](FEATURES.md) for implemented versus planned functionality,
 [TESTING.md](TESTING.md) for commands, reproduced defects and build blockers,
@@ -211,7 +211,7 @@ exact STL export. The full planned feature set is not yet implemented. See
 Foundation regression checks (after `npm ci` in both root and `server/`):
 
 ```sh
-node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts
 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node tests/foundation-browser.mjs
 ```
 
@@ -230,7 +230,7 @@ npm start
 For automated visual workflows, with system Chromium installed:
 
 ```sh
-CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js
 ```
 
 Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.

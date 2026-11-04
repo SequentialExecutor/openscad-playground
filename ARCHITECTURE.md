@@ -120,3 +120,42 @@ and uploads use `.forma3d.json` with a 2 MB import limit. This is deliberately
 separate from the future ZIP format with imported assets. Persistence failures
 remain visible; pending unsaved work triggers the browser's navigation warning.
 Camera changes and transient selection never enter geometry undo history.
+
+## Editable feature graph and exact inspection
+
+Document schema 2 adds a boolean DAG and persisted printer settings. Schema 1
+primitive projects migrate losslessly; unknown versions fail before replacing the
+current document. Boolean features hold stable operand IDs and preserve their
+primitives. Validation rejects dangling references, duplicate operands, cycles
+and paths deeper than 64 nodes. Inputs can reference earlier or later serialized
+features; dependency order comes from references rather than list positions.
+
+`rootNodes` excludes consumed operands. Hiding a result does not automatically
+release its inputs; removing a feature does. Source generation emits bounded
+OpenSCAD modules and explicit root calls rather than recursively expanding shared
+source text. Internal operand visibility does not remove an operand from a
+boolean operation. Selecting an operand displays a wireframe helper and its
+transform gizmo while preserving the exact result separately.
+
+`useFeatureMeshes` debounces exact boolean evaluation and renders validated STL
+results through Three.js. Old revisions cannot publish, and mismatched cached
+source is never displayed. Its cache has 16-entry and 32 MB limits. Geometry
+execution remains in the existing OpenSCAD/Manifold worker; preview and export
+use separate scheduling slots. The reusable evaluation adapter settles canceled
+requests, bounds runtime to 60 seconds and rejects malformed/empty meshes.
+
+`mesh-analysis.ts` runs through a separate bundler-managed worker. It measures
+triangle bounds, surface area and signed-volume magnitude, welds coordinates
+at 0.00001 mm for edge incidence, detects boundary/non-manifold/inconsistently
+oriented edges, duplicate/degenerate/invalid triangles and connected shells.
+Analysis is capped at 250,000 triangles and 30 seconds. Overhang, elevated-shell
+and small-bounding-dimension warnings are heuristics. This is not a general
+wall-thickness, self-intersection, manifold-vertex or support solver. Print
+settings and build volume belong to the document and roundtrip with projects.
+
+Native container version 1 (`.forma3d`) stores `manifest.json` and `project.json`
+in a ZIP. The manifest pins the payload by SHA-256. Reads limit the input to
+5 MB, stream-limit expanded JSON to 2 MB, whitelist archive paths and reject
+unexpected versions and modified payloads. JSON remains a read-only legacy
+import path; new saves use the native container. Imported mesh assets, materials,
+sketches and additional payload files remain future schema work.

@@ -2,10 +2,12 @@ import React, { useEffect, useRef } from "react";
 import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
-import { Body, Design, Vec3 } from "./document";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { Body, Design, Vec3, rootNodes } from "./document";
 
 export interface ViewportProps {
   design: Design;
+  featureMeshes: Record<string, ArrayBuffer>;
   selected?: string;
   mode: "translate" | "rotate" | "scale";
   snap: boolean;
@@ -44,6 +46,8 @@ export default function Viewport(props: ViewportProps) {
     const grid = new T.GridHelper(220, 22, 0x64748b, 0x303c50);
     grid.rotateX(Math.PI / 2);
     scene.add(grid);
+    const buildVolume = new T.Box3Helper(new T.Box3(), 0x546b80);
+    scene.add(buildVolume);
     const axes = new T.AxesHelper(35);
     scene.add(axes);
     const solids = new T.Group();
@@ -157,7 +161,18 @@ export default function Viewport(props: ViewportProps) {
     const refresh = () => {
       if (dragging) return;
       clear();
-      for (const b of latest.current.design.bodies.filter((b) => b.visible)) {
+      const build = latest.current.design.print.build;
+      buildVolume.box.set(
+        new T.Vector3(-build[0] / 2, -build[1] / 2, 0),
+        new T.Vector3(build[0] / 2, build[1] / 2, build[2]),
+      );
+      const roots = new Set(
+        rootNodes(latest.current.design).map((node) => node.id),
+      );
+      for (const b of latest.current.design.bodies.filter(
+        (b) =>
+          b.visible && (roots.has(b.id) || b.id === latest.current.selected),
+      )) {
         const g =
           b.kind === "box"
             ? new T.BoxGeometry(...b.size)
@@ -178,6 +193,9 @@ export default function Viewport(props: ViewportProps) {
           g,
           new T.MeshStandardMaterial({
             color: b.id === latest.current.selected ? 0xffbe55 : 0x6ca7cc,
+            wireframe: !roots.has(b.id),
+            transparent: !roots.has(b.id),
+            opacity: roots.has(b.id) ? 1 : 0.5,
             roughness: 0.55,
             metalness: 0.12,
           }),
@@ -186,6 +204,19 @@ export default function Viewport(props: ViewportProps) {
         setTransform(m, b);
         solids.add(m);
         if (b.id === latest.current.selected && !b.locked) gizmo.attach(m);
+      }
+      for (const [id, data] of Object.entries(latest.current.featureMeshes)) {
+        const geometry = new STLLoader().parse(data);
+        const mesh = new T.Mesh(
+          geometry,
+          new T.MeshStandardMaterial({
+            color: id === latest.current.selected ? 0xffbe55 : 0x6ca7cc,
+            roughness: 0.55,
+            metalness: 0.12,
+          }),
+        );
+        mesh.userData.id = id;
+        solids.add(mesh);
       }
       gizmo.setMode(latest.current.mode);
       gizmo.setTranslationSnap(latest.current.snap ? 1 : null);
@@ -242,6 +273,8 @@ export default function Viewport(props: ViewportProps) {
         orbit.dispose();
         grid.geometry.dispose();
         (grid.material as T.Material).dispose();
+        buildVolume.geometry.dispose();
+        (buildVolume.material as T.Material).dispose();
         axes.geometry.dispose();
         (axes.material as T.Material).dispose();
         renderer.dispose();
@@ -265,7 +298,7 @@ export default function Viewport(props: ViewportProps) {
   }, [props.orthographic]);
   useEffect(
     () => runtime.current?.refresh(),
-    [props.design, props.selected, props.mode, props.snap],
+    [props.design, props.selected, props.mode, props.snap, props.featureMeshes],
   );
   useEffect(() => runtime.current?.view(), [props.cameraView, props.fit]);
   return (

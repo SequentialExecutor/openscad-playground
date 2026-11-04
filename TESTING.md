@@ -72,11 +72,11 @@ Chromium is the only browser engine verified so far. A second engine, full mesh
 topology/slicer compatibility, context-loss recovery, performance benchmarks,
 feature graph/boolean/sketch acceptance scenarios A–G, and imported mesh roundtrip
 are not complete. No guarantee of printability is inferred from passing tests.
-The native persistence format currently holds primitive documents as JSON, not
-ZIP containers with arbitrary assets. TESTING.md distinguishes historical,
+At the initial foundation checkpoint, persistence used primitive JSON; the newer
+container/feature-graph increment is documented below. Imported assets remain unsupported. TESTING.md distinguishes historical,
 current and skipped outcomes; a successful compile alone is not geometry proof.
 
-## Final production validation
+## Foundation production validation (commit 2be4756)
 
 The final source passed `npm run build` and `npx --no-install tsc --noEmit`.
 The expanded visual suite passed all 5 tests in development. A focused production
@@ -120,3 +120,66 @@ The expanded tests initially exposed a stale autosave status after a new edit:
 navigation hooks to move on while the before-unload protection was still active.
 The application now explicitly reports “Saving locally…” for the pending revision;
 the rerun passed. Numeric Escape cancellation and rename undo were also checked.
+
+## Boolean, native-container and inspection increment
+
+Nineteen Node tests pass across `foundation.test.tsx`, `studio-document.test.ts`,
+`mesh-analysis.test.ts` and `project-file.test.ts`. They cover version-1 migration,
+boolean references/root selection, nested source, missing operands, cycles,
+printer settings, ZIP roundtrip, payload integrity, unsafe paths, expanded-size
+limits, topology defects, connected shells, area/volume and warning settings.
+
+Seven visual browser workflows pass in the focused development run (the original
+5 plus 2 boolean scenarios). The boolean scenario verifies an actual through-hole
+with 10 mm then 15 mm diameter and a one-command undo back to 10 mm, checking STL
+inner radius, void crossings, volume and bounds. Save/reload preserves operand
+IDs. Union/intersection volumes are measured; an empty intersection rejects
+export, preserves the document and recovers after editing the operand.
+
+The same real mesh is sent to the analysis worker. Its volume matches the direct
+STL volume calculation; changing the saved build volume produces the expected
+warning. Native ZIP files are saved and uploaded through the browser, while
+legacy JSON and invalid-document cases remain covered. The native hole example
+and exact STL are in `examples/forma3d/editable-hole.*`.
+
+New command for unit validation:
+
+```sh
+node --import ./server/node_modules/tsx/dist/loader.mjs --test \
+  tests/foundation.test.tsx tests/studio-document.test.ts \
+  tests/mesh-analysis.test.ts tests/project-file.test.ts
+```
+
+The expanded suite initially had an incorrect readiness predicate: negating an
+optional button lookup treated an absent button as ready. The predicate now
+requires an existing enabled button. No application behavior or assertion was
+disabled to pass it. Autosave status is now displayed separately from operation
+results so a successful background save cannot erase a modeling error.
+
+Analysis does not certify manifold vertices, shell self-intersections, actual
+internal wall thickness, slicing success or material fit. Multiple-shell volume
+assumes consistent material/cavity winding. Coordinate welding uses 0.00001 mm,
+analysis is capped at 250,000 triangles, exact evaluation at 60 seconds and
+inspection at 30 seconds. These are implementation limits, not skipped proofs.
+
+Final results for this increment:
+
+- Full development browser suite: 58 passed, 26 conditionally skipped.
+- Final production subset: 14 passed across 4 suites; 45 unrelated tests excluded
+  by the explicit name filter. Includes both boolean scenarios, all five visual
+  workflows, four Code-mode checks and three bundle checks.
+- Unit suite: 19 passed. Production build and strict type check passed.
+- `git diff --check` passed. Existing webpack size warnings remain.
+
+The first focused production run passed 13 checks but timed out in one navigation
+hook. The hooks now wait two animation frames for pending React updates before
+asserting that the current document is saved. Navigation protection and all save
+assertions remain active; the final 14-check rerun passed. The separate operation
+and save statuses keep modeling errors from being overwritten by background saves.
+
+Numeric fields now commit only after an actual edit. A production regression
+check preserves a 0.000004 mm position through focus/blur even when its display
+rounds to five decimals. The exact value is available in the field's tooltip.
+Unusual imported feature IDs use prototype-free lookup records; canonical
+validation strips unknown printer fields. Archive roundtrip tests include an
+unusual `__proto__` feature ID.

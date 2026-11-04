@@ -8,3 +8,11 @@ and a 90° Z rotation. Its world bounds are (0, −25, 0) to (30, 25, 20) mm.
 in the automated visual editor test. Its binary STL vertex bounds were checked
 against those values. The file has 12 triangles; it was not substituted with a
 Three.js preview. The editable JSON contains a stable generated body ID.
+
+# Editable boolean hole
+
+Open `editable-hole.forma3d`: a 50 mm cube with a 10 mm diameter through-hole.
+The cylinder and cube remain separate editable operands of a difference feature.
+Change Cylinder's Diameter to 15 mm, then undo to restore 10 mm.
+`editable-hole.stl` is the actual WASM/Manifold export. Tests inspect its bounds,
+inner radius, volume and void through the center rather than only file existence.

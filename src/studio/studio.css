@@ -304,3 +304,26 @@
 body:has(.studio) .github-fork-ribbon {
   display: none;
 }
+.studio-left section > label {
+  display: block;
+  font-size: 12px;
+  color: #b6c7de;
+  margin-bottom: 10px;
+}
+.studio-left section select,
+.studio-right select {
+  width: 100%;
+  margin: 5px 0;
+}
+.studio-print dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.studio-print dt {
+  color: #a9b9cf;
+}
+.studio-print dd {
+  margin: 0 0 7px;
+  color: #f4f6fc;
+}

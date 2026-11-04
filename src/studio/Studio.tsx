@@ -1,5 +1,10 @@
+import { encodeProject, decodeProject } from "./project-file";
+import Numeric from "./Numeric";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  BooleanFeature,
+  createBoolean,
+  rootNodes,
   blankDesign,
   createBody,
   execute,
@@ -15,6 +20,11 @@ import {
 } from "./document";
 import { loadRecovery, saveRecovery } from "./persistence";
 import Viewport from "./Viewport";
+import { useFeatureMeshes } from "./useFeatureMeshes";
+import { BooleanTools, BooleanInspector } from "./BooleanTools";
+import { evaluateExact, inspectStl } from "./evaluate";
+import { PrintPanel } from "./PrintPanel";
+import { MeshAnalysis } from "./mesh-analysis";
 import "./studio.css";
 
 function download(blob: Blob, name: string) {
@@ -25,67 +35,26 @@ function download(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-function Numeric({
-  label,
-  value,
-  positive,
-  onCommit,
-}: {
-  label: string;
-  value: number;
-  positive?: boolean;
-  onCommit: (value: number) => void;
-}) {
-  const [text, setText] = useState(String(value));
-  const canceled = useRef(false);
-  useEffect(() => setText(String(Math.round(value * 1e5) / 1e5)), [value]);
-  const apply = () => {
-    const n = Number(text);
-    if (
-      text.trim() &&
-      Number.isFinite(n) &&
-      Math.abs(n) <= 1e6 &&
-      (!positive || n >= 0.001)
-    )
-      onCommit(n);
-    else setText(String(value));
-  };
-  return (
-    <label>
-      {label}
-      <input
-        aria-label={label}
-        type="number"
-        step="any"
-        min={positive ? 0.001 : undefined}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => {
-          if (canceled.current) canceled.current = false;
-          else apply();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") {
-            canceled.current = true;
-            setText(String(value));
-            e.currentTarget.blur();
-          }
-        }}
-      />
-    </label>
-  );
-}
 export default function Studio() {
   const [history, setHistory] = useState<History>({
     past: [],
     present: blankDesign(),
     future: [],
   });
+  const [analysis, setAnalysis] = useState<{
+    source: string;
+    settings: string;
+    report: MeshAnalysis;
+  }>();
+  const [analyzing, setAnalyzing] = useState(false);
   const design = history.present;
+  const printSettings = design.print;
+  const exactFeatures = useFeatureMeshes(design);
+  const nodes = [...design.bodies, ...design.features];
   const current = useRef(design);
   current.current = design;
   const [selected, setSelected] = useState<string>();
+  const feature = design.features.find((f) => f.id === selected);
   const [draft, setDraft] = useState<Body>();
   const dragActive = useRef(false);
   dragActive.current = !!draft;
@@ -99,6 +68,7 @@ export default function Studio() {
   const [view, setView] = useState<"iso" | "top" | "front" | "right">("iso");
   const [fit, setFit] = useState(0);
   const [status, setStatus] = useState("Loading local recovery…");
+  const [saveStatus, setSaveStatus] = useState("");
   const [ready, setReady] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -125,18 +95,18 @@ export default function Studio() {
     revision.current++;
     if (!ready) return;
     unsaved.current = true;
-    setStatus("Saving locally…");
+    setSaveStatus("Saving locally…");
     const t = setTimeout(
       () =>
         saveRecovery(design)
           .then(() => {
             if (current.current === design) {
               unsaved.current = false;
-              setStatus("Saved locally • millimeters");
+              setSaveStatus("Saved locally • millimeters");
             }
           })
           .catch((e) =>
-            setStatus(`Autosave failed — download your project: ${e}`),
+            setSaveStatus(`Autosave failed — download your project: ${e}`),
           ),
       500,
     );
@@ -144,10 +114,24 @@ export default function Studio() {
   }, [design, ready]);
   const commit = (next: Design) => {
     try {
-      setHistory((h) => execute(h, next));
+      const validated = validateDesign(next);
+      setHistory((h) => execute(h, validated));
+      setStatus("Design updated");
     } catch (e) {
       setStatus(String(e));
     }
+  };
+  const changeFeature = (f: BooleanFeature) =>
+    commit({
+      ...design,
+      features: design.features.map((old) => (old.id === f.id ? f : old)),
+    });
+  const removeFeature = () => {
+    if (feature)
+      commit({
+        ...design,
+        features: design.features.filter((f) => f.id !== feature.id),
+      });
   };
   const changeBody = (b: Body) => {
     commit({
@@ -221,90 +205,74 @@ export default function Studio() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
-  const exportStl = async () => {
-    if (busy || !design.bodies.some((b) => b.visible)) return;
+  const exportStl = async (analyze = false) => {
+    if (busy || !rootNodes(design).length) return;
     const snapshot = current.current;
     const token = revision.current;
     setBusy(true);
+    setAnalyzing(analyze);
     setStatus("Evaluating exact geometry in OpenSCAD / Manifold…");
-    let cancelRequested = false;
-    job.current = {
-      kill: () => {
-        cancelRequested = true;
-      },
-    };
+    const task = evaluateExact(generateScad(snapshot), "export");
+    job.current = { kill: () => task.cancel() };
     try {
-      const { renderIsolated } = await import("../runner/actions");
-      if (cancelRequested) throw Error("Export canceled.");
-      const task = renderIsolated({
-        scadPath: "/forma.scad",
-        sources: [{ path: "/forma.scad", content: generateScad(snapshot) }],
-        isPreview: false,
-        mountArchives: false,
-        renderFormat: "stl",
-        streamsCallback: () => {},
-      })({ now: true });
-      let cancel: (error: Error) => void = () => {};
-      const canceled = new Promise<never>((_, reject) => {
-        cancel = reject;
-      });
-      job.current = {
-        kill: () => {
-          task.kill();
-          cancel(Error("Export canceled."));
-        },
-      };
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const output = await Promise.race([
-        task,
-        canceled,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            task.kill();
-            reject(Error("Exact render exceeded 60 seconds."));
-          }, 60000);
-        }),
-      ]).finally(() => clearTimeout(timer));
+      const output = await task.promise;
       if (token !== revision.current)
         throw Error(
           "Design changed during evaluation. Export again to use the current design.",
         );
-      const data = await output.outFile.arrayBuffer();
-      const header = new DataView(data);
-      if (
-        data.byteLength < 84 ||
-        header.getUint32(80, true) === 0 ||
-        data.byteLength !== 84 + header.getUint32(80, true) * 50
-      )
-        throw Error("The engine did not produce a valid nonempty binary STL.");
-      // Reject nonfinite coordinates and zero-area triangles; no preview fallback.
-      for (let o = 84; o < data.byteLength; o += 50) {
-        const points: number[][] = [];
-        for (let v = 0; v < 3; v++) {
-          const p = [0, 1, 2].map((i) =>
-            header.getFloat32(o + 12 + v * 12 + i * 4, true),
+      const triangleCount = inspectStl(output.data);
+      if (analyze) {
+        const report = await new Promise<MeshAnalysis>((resolve, reject) => {
+          const worker = new Worker(
+            new URL("./analysis-worker.ts", import.meta.url),
           );
-          if (!p.every(Number.isFinite))
-            throw Error("Nonfinite export coordinates.");
-          points.push(p);
-        }
-        const a = points[1].map((n, i) => n - points[0][i]),
-          b = points[2].map((n, i) => n - points[0][i]);
-        if (
-          Math.hypot(
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-          ) === 0
-        )
-          throw Error("Degenerate export triangle.");
+          const cleanup = () => {
+            clearTimeout(timer);
+            worker.terminate();
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(Error("Mesh analysis exceeded 30 seconds."));
+          }, 30000);
+          job.current = {
+            kill: () => {
+              cleanup();
+              reject(Error("Mesh analysis canceled."));
+            },
+          };
+          worker.onmessage = (e) => {
+            cleanup();
+            if (e.data.error) reject(Error(e.data.error));
+            else resolve(e.data.result);
+          };
+          worker.onerror = (e) => {
+            cleanup();
+            reject(Error(e.message));
+          };
+          worker.postMessage({ data: output.data, settings: printSettings }, [
+            output.data,
+          ]);
+        });
+        if (token !== revision.current)
+          throw Error(
+            "Design changed during analysis. Analyze the current revision again.",
+          );
+        setAnalysis({
+          source: generateScad(snapshot),
+          settings: JSON.stringify(printSettings),
+          report,
+        });
+        setStatus(
+          "Exact mesh analysis complete. Review defects and heuristic warnings in Print setup.",
+        );
+        return;
       }
-      download(output.outFile, "design.stl");
+      download(output.file, "design.stl");
       setStatus(
-        `Exact STL exported • ${header.getUint32(80, true)} triangles. Topology/printability analysis is not yet available.`,
+        `Exact STL exported • ${triangleCount} triangles. Topology/printability analysis is not yet available.`,
       );
     } catch (e) {
-      setStatus(`Export failed: ${e}`);
+      setStatus(`${analyze ? "Analysis" : "Export"} failed: ${e}`);
     } finally {
       job.current = undefined;
       setBusy(false);
@@ -312,14 +280,27 @@ export default function Studio() {
   };
   const open = async (file: File) => {
     try {
-      if (file.size > 2 * 1024 * 1024)
-        throw Error("Project exceeds 2 MB limit.");
-      const next = validateDesign(JSON.parse(await file.text()));
+      if (file.size > 5 * 1024 * 1024)
+        throw Error("Project exceeds 5 MB limit.");
+      const token = revision.current;
+      const next = await decodeProject(await file.arrayBuffer());
+      if (token !== revision.current)
+        throw Error("Design changed while opening the file. Open it again.");
       commit(next);
       setSelected(undefined);
       setStatus("Opened project");
     } catch (e) {
       setStatus(`Open failed: ${e}`);
+    }
+  };
+  const saveProject = async () => {
+    try {
+      download(
+        new Blob([await encodeProject(design)], { type: "application/zip" }),
+        "design.forma3d",
+      );
+    } catch (e) {
+      setStatus(`Save failed: ${e}`);
     }
   };
   const source = generateScad(design);
@@ -353,24 +334,14 @@ export default function Studio() {
         <button disabled={!ready} onClick={() => fileInput.current?.click()}>
           Open project
         </button>
-        <button
-          disabled={!ready}
-          onClick={() =>
-            download(
-              new Blob([JSON.stringify(design, null, 2)], {
-                type: "application/json",
-              }),
-              "design.forma3d.json",
-            )
-          }
-        >
+        <button disabled={!ready} onClick={() => void saveProject()}>
           Save project
         </button>
         <input
           ref={fileInput}
           hidden
           type="file"
-          accept=".json"
+          accept=".forma3d,.json"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void open(f);
@@ -398,7 +369,7 @@ export default function Studio() {
         </button>
         <span className="studio-divider" />
         <button
-          disabled={busy || !design.bodies.some((b) => b.visible)}
+          disabled={busy || !rootNodes(design).length}
           onClick={() => void exportStl()}
         >
           Export exact STL
@@ -430,8 +401,16 @@ export default function Studio() {
               </button>
             ))}
           </div>
+          <BooleanTools
+            nodes={nodes}
+            onCreate={(operation, inputs) => {
+              const f = createBoolean(operation, inputs);
+              commit({ ...design, features: [...design.features, f] });
+              setSelected(f.id);
+            }}
+          />
           <h2>
-            Objects <small>{design.bodies.length}</small>
+            Objects <small>{nodes.length}</small>
           </h2>
           {design.bodies.length === 0 && (
             <p className="studio-muted">
@@ -461,6 +440,24 @@ export default function Studio() {
                   onClick={() => changeBody({ ...b, locked: !b.locked })}
                 >
                   {b.locked ? "🔒" : "◇"}
+                </button>
+              </li>
+            ))}
+            {design.features.map((f) => (
+              <li key={f.id} className={f.id === selected ? "selected" : ""}>
+                <button
+                  aria-label={`Select ${f.name}`}
+                  aria-pressed={f.id === selected}
+                  onClick={() => setSelected(f.id)}
+                >
+                  {f.name} • boolean
+                </button>
+                <button
+                  aria-label={`Toggle visibility ${f.name}`}
+                  aria-pressed={f.visible}
+                  onClick={() => changeFeature({ ...f, visible: !f.visible })}
+                >
+                  {f.visible ? "◉" : "○"}
                 </button>
               </li>
             ))}
@@ -517,6 +514,7 @@ export default function Studio() {
           <Viewport
             orthographic={orthographic}
             design={design}
+            featureMeshes={exactFeatures.meshes}
             selected={selected}
             mode={mode}
             snap={snap}
@@ -526,6 +524,11 @@ export default function Studio() {
             onDraft={setDraft}
             onCommit={changeBody}
           />
+          {exactFeatures.progress && (
+            <div className="studio-legend" role="status" aria-live="polite">
+              {exactFeatures.progress}
+            </div>
+          )}
           <div className="studio-legend">
             X red · Y green · Z blue • Grid 10 mm • Drag to orbit · right-drag
             to pan · wheel to zoom
@@ -553,6 +556,14 @@ export default function Studio() {
         </section>
         <aside className="studio-right">
           <h2>Properties</h2>
+          {feature && (
+            <BooleanInspector
+              feature={feature}
+              nodes={nodes}
+              onChange={changeFeature}
+              onRemove={removeFeature}
+            />
+          )}
           {body ? (
             <>
               <label>
@@ -574,6 +585,16 @@ export default function Studio() {
                 <p className="studio-muted">
                   Unscaled local bounding dimensions
                 </p>
+                {(body.kind === "cylinder" || body.kind === "cone") && (
+                  <Numeric
+                    label="Diameter (mm)"
+                    value={body.size[0]}
+                    positive
+                    onCommit={(v) =>
+                      changeBody({ ...body, size: [v, v, body.size[2]] })
+                    }
+                  />
+                )}
                 <div className="studio-values">
                   {body.size.map((n, i) => (
                     <Numeric
@@ -632,27 +653,39 @@ export default function Studio() {
             </>
           ) : (
             <p className="studio-muted">
-              Select an object in the viewport or object list to edit its
-              dimensions and transform.
+              Select a primitive in the object list to edit its dimensions and
+              transform.
             </p>
           )}
+          <PrintPanel
+            settings={printSettings}
+            onSettings={(settings) => commit({ ...design, print: settings })}
+            busy={busy || !rootNodes(design).length}
+            onAnalyze={() => void exportStl(true)}
+            report={
+              analysis?.source === source &&
+              analysis.settings === JSON.stringify(printSettings)
+                ? analysis.report
+                : undefined
+            }
+          />
           <details>
             <summary>Current modeling limits</summary>
             <p>
-              Primitive solids and transforms. Multiple bodies are unioned by
-              OpenSCAD for final STL. Editable booleans, sketches, mesh imports
-              and printability analysis are coming in later phases. The JSON
-              project format is a versioned foundation format, not the planned
-              asset ZIP format.
+              Primitive solids, editable booleans, native projects and bounded
+              mesh inspection are available. Sketches, mesh imports and advanced
+              solid operations are still pending. Mesh analysis does not certify
+              printability.
             </p>
           </details>
         </aside>
       </div>
       <footer role="status" aria-live="polite">
         {status}
+        <span>{saveStatus}</span>
         <span>
-          {design.bodies.filter((b) => b.visible).length} visible bodies •
-          Ctrl/⌘ Z undo • Escape cancels a gizmo drag
+          {rootNodes(design).length} visible results • Ctrl/⌘ Z undo • Escape
+          cancels a gizmo drag
         </span>
       </footer>
     </main>

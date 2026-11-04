@@ -50,12 +50,24 @@ function stlBounds(buffer) {
   return { min, max, size: max.map((n, i) => n - min[i]) };
 }
 
+async function nativeProject() {
+  const bytes = await captureDownload("Save project");
+  require("fs").writeFileSync("/tmp/forma-native-example.forma3d", bytes);
+  const zip = await require("jszip").loadAsync(bytes, { checkCRC32: true });
+  return JSON.parse(await zip.file("project.json").async("string"));
+}
 describe("Forma3D visual foundation", () => {
   afterEach(async () => {
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
     await page.waitForFunction(() =>
       document.querySelector("footer")?.textContent.includes("Saved locally"),
     );
-  });
+  }, 15000);
   beforeEach(async () => {
     await page.setViewport({ width: 1440, height: 900 });
     await page.goto(`${base}?studio=1`);
@@ -79,8 +91,7 @@ describe("Forma3D visual foundation", () => {
     expect(await value("rotation Z")).toBe("0");
     await click("Redo");
     expect(await value("rotation Z")).toBe("90");
-    const source = await captureDownload("Save project");
-    const project = JSON.parse(source.toString());
+    const project = await nativeProject();
     expect(project.bodies[0].size).toEqual([50, 30, 20]);
     expect(project.bodies[0].position).toEqual([15, 0, 10]);
     const mesh = await captureDownload("Export exact STL");
@@ -108,10 +119,7 @@ describe("Forma3D visual foundation", () => {
     await page.click('button[aria-label="Select Box"]');
     expect(await value("Width (mm)")).toBe("50");
     expect(await value("rotation Z")).toBe("90");
-    expect(
-      JSON.parse((await captureDownload("Save project")).toString()).bodies[0]
-        .id,
-    ).toBe(project.bodies[0].id);
+    expect((await nativeProject()).bodies[0].id).toBe(project.bodies[0].id);
     await page.screenshot({ path: "/workspace/forma3d-studio.png" });
   }, 120000);
   test("raycast selection, pointer gizmo movement, one-step undo and Escape cancellation", async () => {
@@ -181,9 +189,7 @@ describe("Forma3D visual foundation", () => {
     const fs = require("fs");
     await click("＋ sphere");
     await page.waitForSelector('input[aria-label="Width (mm)"]');
-    const original = JSON.parse(
-      (await captureDownload("Save project")).toString(),
-    );
+    const original = await nativeProject();
     fs.writeFileSync(
       "/tmp/forma-invalid-project.json",
       JSON.stringify({ ...original, version: 999 }),
@@ -193,10 +199,7 @@ describe("Forma3D visual foundation", () => {
     await page.waitForFunction(() =>
       document.querySelector("footer").textContent.includes("Open failed"),
     );
-    expect(
-      JSON.parse((await captureDownload("Save project")).toString()).bodies[0]
-        .id,
-    ).toBe(original.bodies[0].id);
+    expect((await nativeProject()).bodies[0].id).toBe(original.bodies[0].id);
     await click("＋ box");
     expect(await page.$$eval(".studio-tree li", (els) => els.length)).toBe(2);
     fs.writeFileSync("/tmp/forma-valid-project.json", JSON.stringify(original));
@@ -204,10 +207,12 @@ describe("Forma3D visual foundation", () => {
     await page.waitForFunction(
       () => document.querySelectorAll(".studio-tree li").length === 1,
     );
-    expect(
-      JSON.parse((await captureDownload("Save project")).toString()).bodies[0]
-        .kind,
-    ).toBe("sphere");
+    expect((await nativeProject()).bodies[0].kind).toBe("sphere");
+    await click("＋ box");
+    await input.uploadFile("/tmp/forma-native-example.forma3d");
+    await page.waitForFunction(
+      () => document.querySelectorAll(".studio-tree li").length === 1,
+    );
     await page.click('button[aria-label="Select Sphere"]');
     const name = await page.$('input[aria-label="Object name"]');
     await name.focus();
@@ -216,6 +221,11 @@ describe("Forma3D visual foundation", () => {
     await page.keyboard.press("Tab");
     await click("Undo");
     expect(await value("Object name")).toBe("Sphere");
+    await numeric("position X", 0.000004);
+    const precise = await page.$('input[aria-label="position X"]');
+    await precise.focus();
+    await page.keyboard.press("Tab");
+    expect((await nativeProject()).bodies[0].position[0]).toBe(0.000004);
     await numeric("position X", 0);
     const width = await page.$('input[aria-label="Width (mm)"]');
     await width.focus();

@@ -18,28 +18,39 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 - Read-only deterministic generated SCAD and SCAD download.
 - Exact binary STL from the OpenSCAD/Manifold worker, with stale-result rejection,
   cancellation, a 60-second timeout and basic binary/triangle validation.
-- Versioned `.forma3d.json` project download/upload, bounded schema validation,
-  one IndexedDB autosave/recovery slot and unsaved-navigation warnings.
+- Native `.forma3d` ZIP project save/open with a SHA-256 integrity manifest,
+  bounded decompression and safe path validation; older JSON projects migrate.
+- IndexedDB autosave/recovery and unsaved-navigation warnings.
+- Editable union, difference and intersection features with preserved operands,
+  validated DAG references, nested feature support and debounced exact display.
+- A circular cylinder/cone diameter control updates width/depth as one undo step.
+- Document-owned printer build volume, nozzle, layer height, minimum suggested
+  wall and overhang settings, plus a build-volume outline in the viewport.
+- Worker-based exact mesh inspection: bounds, area, signed volume for valid edge
+  topology, boundary/non-manifold/inconsistent edges, duplicate/degenerate/invalid
+  triangles and shell count. Build-volume checks and labeled overhang/elevated
+  shell/small-dimension heuristics are provided.
 - Resizable side panels on desktop; wrapping tools and properties on narrow
   screens. Full layout persistence and collapsible panels remain future work.
 - Earlier customizer zero/empty-value and 3MF build-UUID fixes retained.
 
 ## Not implemented yet
 
-Dependent feature graph; editable union/difference/intersection features;
-sketches/constraints/extrusion; shell/fillet/chamfer; patterns; multi-selection;
-mesh import and repair; project asset ZIPs/migrations/recent projects; persistent
-camera/workspace arrangement; 3D measurement tools and printer analysis/templates.
+Sketches/constraints/extrusion; shell/fillet/chamfer; patterns; multi-selection;
+mesh import and repair; imported project assets and recent projects; persistent
+camera/workspace arrangement; interactive point/angle measurement, arbitrary wall-thickness analysis and mechanical templates.
 Only four camera presets and world-space move/rotate are currently exposed.
 The original Code workspace retains its broader export and library capabilities;
-visual mode currently exposes SCAD and STL only.
+visual geometry export currently exposes SCAD and STL only, plus native projects.
 
-Multiple visible bodies are implicitly unioned for final export. They remain
-separate primitives in the document, not editable boolean features. Hidden bodies
-are omitted. Locking protects direct edits/deletion, but visibility and explicit
+Unconsumed visible roots are unioned for final export. Boolean operands remain
+editable and may be shared by nested features. Hidden roots are omitted; hidden
+operands still participate in the features that reference them. Locking protects direct edits/deletion, but visibility and explicit
 unlock remain available. The document uses millimeters; presentation-unit
 conversion is not yet supported. Generated meshes are not guaranteed printable;
-watertightness, connected shells and overhangs are not yet analyzed.
+edge topology and connected shells are measured, while overhangs are heuristic.
+Self-intersections, non-manifold vertices, actual internal wall thickness and
+slicer acceptance are not verified. Analysis is limited to 250,000 triangles.
 
 The foundation is usable; the full Forma3D product and scenarios A–G are not
 complete. See TESTING.md for exact evidence and ARCHITECTURE.md for the roadmap.
