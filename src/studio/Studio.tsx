@@ -1,3 +1,8 @@
+import { ModelingTools, ModelingInspector } from "./ModelingTools";
+import { MechanicalTools, MechanicalInspector } from "./MechanicalTools";
+import { createModelingFeature, modelingNames } from "./advanced";
+import PositioningTools, { PositionAction } from "./PositioningTools";
+import { translated, independentReference, distribution } from "./positioning";
 import SketchEditor from "./SketchEditor";
 import { Extrusion, rectangleSketch } from "./sketch";
 import { encodeProject, decodeProject } from "./project-file";
@@ -5,6 +10,9 @@ import Numeric from "./Numeric";
 import React, { useEffect, useRef, useState } from "react";
 import {
   BooleanFeature,
+  Feature,
+  Transformable,
+  createTemplateBody,
   createBoolean,
   rootNodes,
   blankDesign,
@@ -50,6 +58,7 @@ export default function Studio() {
     report: MeshAnalysis;
   }>();
   const [analyzing, setAnalyzing] = useState(false);
+  const [positioning, setPositioning] = useState(false);
   const design = history.present;
   const printSettings = design.print;
 
@@ -64,12 +73,18 @@ export default function Studio() {
   }>();
   const sketchActive = useRef(false);
   sketchActive.current = !!editingSketch;
-  const feature = design.features.find((f) => f.id === selected);
-  const [draft, setDraft] = useState<Body>();
+  const [draft, setDraft] = useState<Transformable>();
+  const feature =
+    draft && "spec" in draft
+      ? draft
+      : design.features.find((f) => f.id === selected);
   const dragActive = useRef(false);
   dragActive.current = !!draft;
   const unsaved = useRef(false);
-  const body = draft ?? design.bodies.find((b) => b.id === selected);
+  const body =
+    draft && "kind" in draft
+      ? draft
+      : design.bodies.find((b) => b.id === selected);
   const [mode, setMode] = useState<"translate" | "rotate" | "scale">(
     "translate",
   );
@@ -131,13 +146,13 @@ export default function Studio() {
       setStatus(String(e));
     }
   };
-  const changeFeature = (f: BooleanFeature) =>
+  const changeFeature = (f: Feature) =>
     commit({
       ...design,
       features: design.features.map((old) => (old.id === f.id ? f : old)),
     });
   const removeFeature = () => {
-    if (feature)
+    if (feature && !("locked" in feature && feature.locked))
       commit({
         ...design,
         features: design.features.filter((f) => f.id !== feature.id),
@@ -216,12 +231,124 @@ export default function Studio() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
+  const positionObjects = async (action: PositionAction) => {
+    if (busy) return;
+    const snapshot = current.current,
+      token = revision.current;
+    if (action.kind === "align") {
+      try {
+        independentReference(snapshot, action.target, action.reference);
+      } catch (e) {
+        setStatus(String(e));
+        return;
+      }
+    }
+    const ids =
+      action.kind === "distribute"
+        ? action.members
+        : action.kind === "align"
+          ? [action.target, action.reference]
+          : [action.target];
+    if (
+      action.kind === "distribute" &&
+      ids.some((id) => !rootNodes(snapshot).some((n) => n.id === id))
+    ) {
+      setStatus("Choose independent roots for distribution.");
+      return;
+    }
+    let canceled = false,
+      activeCancel: (() => void) | undefined;
+    setBusy(true);
+    setPositioning(true);
+    setStatus("Measuring exact geometry for positioning…");
+    job.current = {
+      kill: () => {
+        canceled = true;
+        activeCancel?.();
+      },
+    };
+    try {
+      const measurements = [];
+      for (const id of ids) {
+        if (canceled) throw Error("Positioning canceled.");
+        const task = evaluateExact(generateScad(snapshot, [id]), "export");
+        activeCancel = task.cancel;
+        const result = await task.promise;
+        if (canceled) throw Error("Positioning canceled.");
+        const bounds = await new Promise<{ min: number[]; max: number[] }>(
+          (resolve, reject) => {
+            const worker = new Worker(
+              new URL("./bounds-worker.ts", import.meta.url),
+            );
+            const timer = setTimeout(() => {
+              worker.terminate();
+              reject(Error("Bounds measurement exceeded 30 seconds."));
+            }, 30000);
+            const cleanup = () => {
+              clearTimeout(timer);
+              worker.terminate();
+            };
+            activeCancel = () => {
+              cleanup();
+              reject(Error("Positioning canceled."));
+            };
+            worker.onmessage = (e) => {
+              cleanup();
+              if (e.data.error) reject(Error(e.data.error));
+              else resolve(e.data.result);
+            };
+            worker.onerror = (e) => {
+              cleanup();
+              reject(Error(e.message));
+            };
+            worker.postMessage(result.data, [result.data]);
+          },
+        );
+        measurements.push({ id, bounds });
+      }
+      if (canceled || token !== revision.current)
+        throw Error(
+          "Positioning canceled or design changed; repeat the operation.",
+        );
+      let moves: { id: string; delta: Vec3 }[];
+      if (action.kind === "distribute")
+        moves = distribution(measurements, action.axis, action.mode);
+      else {
+        const a = measurements[0].bounds,
+          delta: Vec3 = [0, 0, 0];
+        if (action.kind === "align") {
+          const b = measurements[1].bounds;
+          const coordinate = (b: typeof a) =>
+            action.anchor === "center"
+              ? (b.min[action.axis] + b.max[action.axis]) / 2
+              : b[action.anchor][action.axis];
+          delta[action.axis] = coordinate(b) - coordinate(a);
+        } else if (action.kind === "plate") delta[2] = -a.min[2];
+        else for (let i = 0; i < 3; i++) delta[i] = -(a.min[i] + a.max[i]) / 2;
+        moves = [{ id: action.target, delta }];
+      }
+      const next = translated(snapshot, moves),
+        added = next.features.find(
+          (f) => !snapshot.features.some((old) => old.id === f.id),
+        );
+      commit(next);
+      setSelected(added?.id ?? action.target);
+      setStatus("Exact positioning complete.");
+    } catch (e) {
+      setStatus(`Positioning failed: ${e}`);
+    } finally {
+      job.current = undefined;
+      setBusy(false);
+      setPositioning(false);
+    }
+  };
   const exportStl = async (analyze = false) => {
     if (busy || !rootNodes(design).length) return;
     const snapshot = current.current;
     const token = revision.current;
     setBusy(true);
     setAnalyzing(analyze);
+    setPositioning(false);
     setStatus("Evaluating exact geometry in OpenSCAD / Manifold…");
     const task = evaluateExact(generateScad(snapshot), "export");
     job.current = { kill: () => task.cancel() };
@@ -395,10 +522,14 @@ export default function Studio() {
           <button
             onClick={() => {
               job.current?.kill();
-              setStatus("Canceling exact render…");
+              setStatus("Canceling current operation…");
             }}
           >
-            Cancel export
+            {positioning
+              ? "Cancel positioning"
+              : analyzing
+                ? "Cancel analysis"
+                : "Cancel export"}
           </button>
         )}
         <button
@@ -444,6 +575,38 @@ export default function Studio() {
           >
             Sketch & extrude
           </button>
+          <ModelingTools
+            nodes={nodes}
+            roots={rootNodes(design).map((n) => n.id)}
+            selected={selected}
+            onCreate={(op, inputs) => {
+              const f = createModelingFeature(op, inputs, design);
+              try {
+                const next = validateDesign({
+                  ...design,
+                  features: [...design.features, f],
+                });
+                commit(next);
+                setSelected(f.id);
+              } catch (e) {
+                setStatus(`Modeling failed: ${e}`);
+              }
+            }}
+          />
+          <MechanicalTools
+            onAdd={(spec) => {
+              const b = createTemplateBody(spec);
+              commit({ ...design, bodies: [...design.bodies, b] });
+              setSelected(b.id);
+            }}
+          />
+          <PositioningTools
+            nodes={nodes}
+            roots={rootNodes(design).map((n) => n.id)}
+            selected={selected}
+            busy={busy}
+            onAction={(action) => void positionObjects(action)}
+          />
           <h2>
             Objects <small>{nodes.length}</small>
           </h2>
@@ -485,7 +648,7 @@ export default function Studio() {
                   aria-pressed={f.id === selected}
                   onClick={() => setSelected(f.id)}
                 >
-                  {f.name} • boolean
+                  {f.name} • {"spec" in f ? "feature" : "boolean"}
                 </button>
                 <button
                   aria-label={`Toggle visibility ${f.name}`}
@@ -557,7 +720,13 @@ export default function Studio() {
             fit={fit}
             onSelect={setSelected}
             onDraft={setDraft}
-            onCommit={changeBody}
+            onCommit={(node) => {
+              if ("kind" in node) changeBody(node);
+              else {
+                changeFeature(node);
+                setDraft(undefined);
+              }
+            }}
           />
           {exactFeatures.progress && (
             <div className="studio-legend" role="status" aria-live="polite">
@@ -591,8 +760,16 @@ export default function Studio() {
         </section>
         <aside className="studio-right">
           <h2>Properties</h2>
-          {feature && (
+          {feature && !("spec" in feature) && (
             <BooleanInspector
+              feature={feature}
+              nodes={nodes}
+              onChange={changeFeature}
+              onRemove={removeFeature}
+            />
+          )}
+          {feature && "spec" in feature && (
+            <ModelingInspector
               feature={feature}
               nodes={nodes}
               onChange={changeFeature}
@@ -616,9 +793,20 @@ export default function Studio() {
                 {body.kind} •{" "}
                 {body.kind === "extrusion"
                   ? "sketch origin"
-                  : "centered origin"}
+                  : body.kind === "template"
+                    ? "template origin (base Z=0)"
+                    : "centered origin"}
                 {body.locked ? " • locked" : ""}
               </p>
+              {body.kind === "template" && body.template && (
+                <fieldset disabled={body.locked || !!draft}>
+                  <MechanicalInspector
+                    spec={body.template}
+                    onChange={(template) => changeBody({ ...body, template })}
+                  />
+                  <p>Derived local bounds: {body.size.join(" × ")} mm</p>
+                </fieldset>
+              )}
               {body.kind === "extrusion" && body.extrusion && (
                 <fieldset disabled={body.locked || !!draft}>
                   <legend>Sketch extrusion</legend>
@@ -649,7 +837,7 @@ export default function Studio() {
                   </p>
                 </fieldset>
               )}
-              {body.kind !== "extrusion" && (
+              {body.kind !== "template" && body.kind !== "extrusion" && (
                 <fieldset disabled={body.locked || !!draft}>
                   <legend>Dimensions (mm)</legend>
                   <p className="studio-muted">

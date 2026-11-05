@@ -1,4 +1,17 @@
 import {
+  ModelingFeature,
+  validateModelingFeature,
+  validateAdvancedDependencies,
+  modelingScad,
+} from "./advanced";
+import {
+  MechanicalSpec,
+  validateTemplate,
+  templateSize,
+  templateScad,
+  templateNames,
+} from "./templates";
+import {
   Extrusion,
   validateExtrusion,
   extrusionSize,
@@ -15,7 +28,8 @@ export type Shape = "box" | "sphere" | "cylinder" | "cone";
 export interface Body {
   id: string;
   name: string;
-  kind: Shape | "extrusion";
+  kind: Shape | "extrusion" | "template";
+  template?: MechanicalSpec;
   extrusion?: Extrusion;
   size: Vec3;
   position: Vec3;
@@ -32,12 +46,14 @@ export interface BooleanFeature {
   inputs: [string, string];
   visible: boolean;
 }
+export type Feature = BooleanFeature | ModelingFeature;
+export type Transformable = Body | ModelingFeature;
 export interface Design {
-  version: 3;
+  version: 4;
   name: string;
   units: "mm";
   bodies: Body[];
-  features: BooleanFeature[];
+  features: Feature[];
   print: PrintSettings;
 }
 export interface History {
@@ -46,7 +62,7 @@ export interface History {
   future: Design[];
 }
 export const blankDesign = (): Design => ({
-  version: 3,
+  version: 4,
   features: [],
   print: structuredClone(defaultPrintSettings),
   name: "Untitled design",
@@ -72,13 +88,13 @@ export function validateDesign(input: unknown): Design {
   const raw = input as { version?: unknown };
   const d = (
     raw.version === 1
-      ? { ...input, version: 3, features: [] }
-      : raw.version === 2
-        ? { ...input, version: 3 }
+      ? { ...input, version: 4, features: [] }
+      : raw.version === 2 || raw.version === 3
+        ? { ...input, version: 4 }
         : input
   ) as Design;
   if (
-    d.version !== 3 ||
+    d.version !== 4 ||
     d.units !== "mm" ||
     typeof d.name !== "string" ||
     d.name.length > 200 ||
@@ -93,7 +109,9 @@ export function validateDesign(input: unknown): Design {
   for (const b of d.bodies) {
     if (
       !b ||
-      !["box", "sphere", "cylinder", "cone", "extrusion"].includes(b.kind) ||
+      !["box", "sphere", "cylinder", "cone", "extrusion", "template"].includes(
+        b.kind,
+      ) ||
       typeof b.id !== "string" ||
       !b.id ||
       ids.has(b.id) ||
@@ -134,14 +152,23 @@ export function validateDesign(input: unknown): Design {
       ids.has(f.id) ||
       typeof f.name !== "string" ||
       f.name.length > 200 ||
-      !["union", "difference", "intersection"].includes(f.operation) ||
       typeof f.visible !== "boolean" ||
       !Array.isArray(f.inputs) ||
-      f.inputs.length !== 2 ||
       !f.inputs.every((id) => typeof id === "string") ||
-      f.inputs[0] === f.inputs[1]
+      new Set(f.inputs).size !== f.inputs.length
     )
-      throw Error("Invalid boolean feature or duplicate ID/operand.");
+      throw Error("Invalid feature or duplicate ID/operand.");
+    if (["union", "difference", "intersection"].includes(f.operation)) {
+      if (f.inputs.length !== 2) throw Error("A boolean needs two operands.");
+    } else {
+      validateModelingFeature(f as ModelingFeature);
+      if (
+        f.operation === "group"
+          ? f.inputs.length < 1 || f.inputs.length > 1000
+          : f.inputs.length !== 1
+      )
+        throw Error("Invalid modeling operand count.");
+    }
     ids.add(f.id);
   }
   for (const id of sketchIds)
@@ -152,7 +179,7 @@ export function validateDesign(input: unknown): Design {
   const visit = (id: string): number => {
     if (!ids.has(id))
       throw Error(
-        "Boolean operand is missing. Remove dependent features before deleting an operand.",
+        "Feature operand is missing. Remove dependent features before deleting an operand.",
       );
     if (visiting.has(id)) throw Error("Feature graph contains a cycle.");
     const cached = depths.get(id);
@@ -166,9 +193,40 @@ export function validateDesign(input: unknown): Design {
     return depth;
   };
   for (const id of ids) visit(id);
+  const costs = new Map<string, number>();
+  const cost = (id: string): number => {
+    if (costs.has(id)) return costs.get(id)!;
+    const f = features.get(id);
+    let n = f ? f.inputs.reduce((sum, id) => sum + cost(id), 0) : 1;
+    if (
+      f?.operation === "linear-pattern" ||
+      f?.operation === "circular-pattern"
+    )
+      n *= f.spec.count;
+    if (f?.operation === "mirror" && f.spec.keepOriginal) n *= 2;
+    if (n > 10000)
+      throw Error("Model exceeds 10,000 expanded primitive instances.");
+    costs.set(id, n);
+    return n;
+  };
+  for (const id of ids) cost(id);
+  const consumed = new Set(d.features.flatMap((f) => f.inputs));
+  if (
+    [...ids]
+      .filter((id) => !consumed.has(id))
+      .reduce((sum, id) => sum + cost(id), 0) > 10000
+  )
+    throw Error("Model exceeds 10,000 expanded primitive instances.");
+  validateAdvancedDependencies(d);
+  for (const b of d.bodies)
+    if (b.kind === "template") {
+      const size = templateSize(validateTemplate(b.template!));
+      if (!size.every((n) => n >= 0.001 && n <= 1e6))
+        throw Error("Template bounds exceed modeling limits.");
+    }
   // Strip unrecognized fields so imported data cannot alter runtime-only state.
   return {
-    version: 3,
+    version: 4,
     print: {
       build: [...print.build],
       nozzle: print.nozzle,
@@ -176,20 +234,32 @@ export function validateDesign(input: unknown): Design {
       minimumWall: print.minimumWall,
       overhang: print.overhang,
     },
-    features: d.features.map((f) => ({
-      id: f.id,
-      name: f.name,
-      operation: f.operation,
-      inputs: [...f.inputs],
-      visible: f.visible,
-    })),
+    features: d.features.map((f) =>
+      ["union", "difference", "intersection"].includes(f.operation)
+        ? {
+            id: f.id,
+            name: f.name,
+            operation: f.operation as BooleanOperation,
+            inputs: [...f.inputs] as [string, string],
+            visible: f.visible,
+          }
+        : validateModelingFeature(f as ModelingFeature),
+    ),
     name: d.name,
     units: "mm",
     bodies: d.bodies.map((b) => ({
       id: b.id,
       name: b.name,
       kind: b.kind,
-      size: b.kind === "extrusion" ? extrusionSize(b.extrusion!) : [...b.size],
+      size:
+        b.kind === "extrusion"
+          ? extrusionSize(b.extrusion!)
+          : b.kind === "template"
+            ? templateSize(b.template!)
+            : [...b.size],
+      ...(b.kind === "template"
+        ? { template: validateTemplate(b.template!) }
+        : {}),
       ...(b.kind === "extrusion"
         ? { extrusion: validateExtrusion(b.extrusion!) }
         : {}),
@@ -240,7 +310,7 @@ export function createBoolean(
     visible: true,
   };
 }
-export function rootNodes(d: Design): (Body | BooleanFeature)[] {
+export function rootNodes(d: Design): (Body | Feature)[] {
   const consumed = new Set(d.features.flatMap((f) => f.inputs));
   return [...d.bodies, ...d.features].filter(
     (node) => node.visible && !consumed.has(node.id),
@@ -265,17 +335,21 @@ export function generateScad(design: Design, roots?: string[]): string {
     .filter((node) => used.has(node.id))
     .map((node) => {
       const name = `n${byId.get(node.id)!.index}`;
+      if ("inputs" in node && "spec" in node)
+        return `module ${name}() { ${modelingScad(d, node, (id) => `n${byId.get(id)!.index}();`)} }`;
       if ("inputs" in node)
         return `module ${name}() { ${node.operation}() { ${node.inputs.map((id) => `n${byId.get(id)!.index}();`).join(" ")} } }`;
       const b = node;
       const solid =
-        b.kind === "extrusion"
-          ? extrusionScad(b.extrusion!)
-          : b.kind === "box"
-            ? `cube(${JSON.stringify(b.size)}, center=true);`
-            : b.kind === "sphere"
-              ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
-              : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
+        b.kind === "template"
+          ? templateScad(b.template!)
+          : b.kind === "extrusion"
+            ? extrusionScad(b.extrusion!)
+            : b.kind === "box"
+              ? `cube(${JSON.stringify(b.size)}, center=true);`
+              : b.kind === "sphere"
+                ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
+                : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
       return `module ${name}() { translate(${JSON.stringify(b.position)}) rotate(${JSON.stringify(b.rotation)}) scale(${JSON.stringify(b.scale)}) ${solid} }`;
     });
   return (
@@ -297,4 +371,19 @@ export function createExtrusion(extrusion: Extrusion): Body {
     size: extrusionSize(e),
     extrusion: e,
   };
+}
+
+export function createTemplateBody(template: MechanicalSpec): Body {
+  const t = validateTemplate(template);
+  return {
+    ...createBody("box"),
+    kind: "template",
+    name: templateNames[t.kind],
+    position: [0, 0, 0],
+    size: templateSize(t),
+    template: t,
+  };
+}
+export function isTransformable(node: Body | Feature): node is Transformable {
+  return "position" in node;
 }

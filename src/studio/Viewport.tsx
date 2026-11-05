@@ -3,7 +3,14 @@ import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
-import { Body, Design, Vec3, rootNodes } from "./document";
+import {
+  Body,
+  Design,
+  Vec3,
+  rootNodes,
+  Transformable,
+  isTransformable,
+} from "./document";
 
 export interface ViewportProps {
   design: Design;
@@ -15,8 +22,8 @@ export interface ViewportProps {
   orthographic: boolean;
   fit: number;
   onSelect: (id?: string) => void;
-  onDraft: (body?: Body) => void;
-  onCommit: (body: Body) => void;
+  onDraft: (body?: Transformable) => void;
+  onCommit: (body: Transformable) => void;
 }
 export default function Viewport(props: ViewportProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -57,14 +64,17 @@ export default function Viewport(props: ViewportProps) {
     scene.add(gizmo.getHelper());
     let dragging = false,
       cancelled = false,
-      initial: Body | undefined;
+      initial: Transformable | undefined;
     const cloneBody = () => {
-      const body = latest.current.design.bodies.find(
-        (b) => b.id === gizmo.object?.userData.id,
-      );
+      const body = [
+        ...latest.current.design.bodies,
+        ...latest.current.design.features,
+      ]
+        .filter(isTransformable)
+        .find((b) => b.id === gizmo.object?.userData.id);
       return body ? structuredClone(body) : undefined;
     };
-    const readBody = (): Body | undefined => {
+    const readBody = (): Transformable | undefined => {
       const o = gizmo.object;
       const b = initial ?? cloneBody();
       if (!b || !o) return;
@@ -76,7 +86,7 @@ export default function Viewport(props: ViewportProps) {
         scale: o.scale.toArray().map((n) => Math.max(0.001, n)) as Vec3,
       };
     };
-    const setTransform = (o: T.Object3D, b: Body) => {
+    const setTransform = (o: T.Object3D, b: Transformable) => {
       o.position.fromArray(b.position);
       o.rotation.set(...(b.rotation.map(T.MathUtils.degToRad) as Vec3), "ZYX");
       o.scale.fromArray(b.scale);
@@ -172,6 +182,7 @@ export default function Viewport(props: ViewportProps) {
       for (const b of latest.current.design.bodies.filter(
         (b) =>
           b.kind !== "extrusion" &&
+          b.kind !== "template" &&
           b.visible &&
           (roots.has(b.id) || b.id === latest.current.selected),
       )) {
@@ -217,7 +228,12 @@ export default function Viewport(props: ViewportProps) {
             metalness: 0.12,
           }),
         );
-        const body = latest.current.design.bodies.find((b) => b.id === id);
+        const body = [
+          ...latest.current.design.bodies,
+          ...latest.current.design.features,
+        ]
+          .filter(isTransformable)
+          .find((b) => b.id === id);
         if (body) {
           setTransform(mesh, body);
           if (!roots.has(id)) {

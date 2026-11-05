@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Body, BooleanFeature, BooleanOperation } from "./document";
-type Node = Body | BooleanFeature;
+import { Body, BooleanFeature, BooleanOperation, Feature } from "./document";
+type Node = Body | Feature;
 export function BooleanTools({
   nodes,
   onCreate,

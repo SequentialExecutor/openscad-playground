@@ -24,7 +24,7 @@ test("legacy JSON projects migrate through the same validator", async () => {
   const restored = await decodeProject(
     new TextEncoder().encode(JSON.stringify(d)).buffer,
   );
-  assert.equal(restored.version, 3);
+  assert.equal(restored.version, 4);
   assert.deepEqual(restored.features, []);
   assert.deepEqual(restored.bodies, d.bodies);
 });

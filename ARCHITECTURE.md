@@ -92,11 +92,11 @@ unresolved foundational build/render failures. See TESTING.md for evidence and
 FEATURES.md for current product scope.
 
 
-## Implemented visual foundation
+## Original visual foundation (schema 1)
 
 `?studio=1` loads `Studio` as a separate lazy entry inside the existing webpack
 application. The regular URL, embed mode and MCP application retain their
-existing workflows. `document.ts` owns a version-1 document of centered primitive
+existing workflows. At the first checkpoint, `document.ts` owned a version-1 document of centered primitive
 bodies, with millimeter dimensions, degree rotations, positive scales, stable IDs,
 visibility and locks. The flat body collection is the first document schema, not
 the planned dependent feature graph. Imported documents are bounded and validated;
@@ -157,8 +157,8 @@ Native container version 1 (`.forma3d`) stores `manifest.json` and `project.json
 in a ZIP. The manifest pins the payload by SHA-256. Reads limit the input to
 5 MB, stream-limit expanded JSON to 2 MB, whitelist archive paths and reject
 unexpected versions and modified payloads. JSON remains a read-only legacy
-import path; new saves use the native container. Imported mesh assets, materials,
-sketches and additional payload files remain future schema work.
+import path; new saves use the native container. Imported mesh assets, materials and additional payload files remain future schema work.
+Sketches are stored in the schema-3/4 JSON payload described below.
 
 ## Schema 3: sketches and linear extrusion
 
@@ -192,3 +192,45 @@ reverse conversion from arbitrary SCAD.
 Screenshots in `docs/images` are generated from the real production application
 by `scripts/capture-studio-docs.mjs`. They cover the workspace, editable boolean,
 inspection report and verified sketch constraints. No mock geometry is used.
+
+
+## Schema 4: advanced modeling and templates
+
+`advanced.ts` defines typed parametric modeling nodes with preserved input IDs,
+validated settings and their own pose. `templates.ts` defines procedural mechanical
+body specifications; bounding dimensions are derived on validation. Schema-1/2/3
+projects migrate to schema 4 while keeping IDs and geometry. Boolean nodes retain
+their existing representation. Dependency validation rejects cycles, impossible
+feature/profile combinations and more than 10,000 expanded primitive instances.
+Patterns allow 2–100 instances per feature; the graph depth limit remains 64.
+
+The compiler emits real mirror/loop/group operations, profile offset, rotational
+extrusion, local profile shell differences and bounded box edge treatments.
+Fillets use a rounded rectangle; chamfers use an explicit eight-vertex profile
+with a true edge setback. These are not arbitrary B-rep edge operations. Shell
+reuses known convex profiles, including box edge-treatment profiles, with an
+inset cavity and controlled floor/top. Unsupported solid/profile chains fail
+validation rather than silently approximating a general operation.
+
+Exact display meshes for transformable bodies/features exclude only their own
+pose; Three.js applies that pose to cached local geometry. Operands retain their
+world transforms during compilation. This allows immediate result gizmo feedback
+without rebuilding its local geometry, while dependent results recompute normally.
+The authoritative document and SCAD export include every pose.
+
+Positioning evaluates selected nodes in the export worker slot, then transfers
+the binary STL into `bounds-worker.ts`. A dedicated pure bounds reader keeps this
+worker independent of evaluation modules. Results have revision/cancellation guards;
+measurements do not enter the document. `positioning.ts` calculates translations
+from measured world bounds. Legacy boolean targets receive a single-input group
+wrapper; other targets update their own pose. Distribution changes inner roots
+only and preserves outer anchors. Each operation commits one immutable transaction.
+
+Mechanical templates compile to dimensional solids, not static downloaded meshes.
+Enclosure posts/holes use width/depth-relative mounting insets. Hole templates are
+explicit cutting solids for boolean subtraction. Snap-fit geometry is labeled as
+an unvalidated reference, without material or tolerance claims. Mesh import is
+deferred and no imported assets have been added to native container version 1.
+
+The illustrated guide includes actual production captures of the enclosure and
+circular pattern. Examples include a native editable enclosure and its exact STL.

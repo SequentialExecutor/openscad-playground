@@ -23,6 +23,9 @@ export default function Numeric({
     if (!edited.current) return;
     edited.current = false;
     const n = Number(text);
+    // A domain validator may reject an otherwise valid number. Show the
+    // accepted value until a successful document update supplies the new one.
+    setText(String(value));
     if (
       text.trim() &&
       Number.isFinite(n) &&
@@ -30,7 +33,6 @@ export default function Numeric({
       (!positive || n >= 0.001)
     )
       onCommit(n);
-    else setText(String(value));
   };
   return (
     <label>

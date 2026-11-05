@@ -25,3 +25,15 @@ the referenced Difference feature recomputes while preserving both operands.
 The test changed width from 40 to 60 mm, undid/redid it, reloaded the project and
 checked the actual exported volume and bounds. `sketch-plate.stl` is that kernel
 export, not the viewport mesh.
+
+
+# Parametric enclosure
+
+`parametric-enclosure.forma3d` is a 120 × 60 × 30 mm open enclosure with 3 mm
+walls/floor, 5 mm corner radius, four 8 mm posts (6 mm above the floor) and 3 mm
+through-holes. Their 10 mm mounting inset follows width/depth edits. The browser
+test changed width from 100 to 120 mm, checked new/old hole locations and the
+floor/post heights in exact triangles, then saved and reloaded the project.
+`parametric-enclosure.stl` is that actual OpenSCAD/Manifold export. The template
+specification, transforms, IDs and printer settings remain editable in the native
+project; mesh import is not required.

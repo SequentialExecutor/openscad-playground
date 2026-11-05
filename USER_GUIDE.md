@@ -115,3 +115,85 @@ constraints, arcs, multiple-contour sketches and arbitrary-face attachment are
 not available. Coincident endpoints can close a profile even without its explicit
 closing edge. Draft point positions are transient until Apply; the last valid
 applied document remains intact after invalid edits or worker errors.
+
+
+## Advanced modeling
+
+Select a solid, expand **Advanced modeling**, and confirm its **Source** before
+creating a feature. The original solid stays editable in Objects; the feature
+consumes its input for final output. Removing the feature releases that input.
+Names, references, settings and independent result transforms persist in projects
+and undo/redo. Move/rotate/scale gizmos also work on modeling results. Result
+transforms use a world-origin pivot, so rotating a group moves its members around
+that origin. Lock a result to protect its parameters and transform.
+
+| Tool | Supported geometry and controls |
+| --- | --- |
+| Mirror | Reflect any solid about world X/Y/Z planes, with a plane offset and optional original. |
+| Linear pattern | 2–100 instances, including the original; X/Y/Z spacing is per instance in world units. |
+| Circular pattern | 2–100 instances about a world-origin axis; offset the source first. A full circle avoids a duplicate endpoint; a partial sweep includes both ends. |
+| Group | Check independent roots, then **Group selected roots**. The group unions their geometry and adds an independent transform. |
+| Box vertical fillet | Round all four vertical edges of a box with a radius smaller than half its width/depth. Outer dimensions stay fixed. |
+| Box vertical chamfer | Cut all four vertical edges of a box with the specified straight setback. Outer dimensions stay fixed. |
+| Shell | Hollow a box, circular cylinder, rectangular/circular sketch extrusion, or edge-treated box. Set wall thickness and choose an open extrusion end or closed top. |
+| Profile offset | Offset a sketch before linear extrusion; choose round, miter or chamfer joins. Negative values inset. Collapsed profiles produce an evaluation error. |
+| Revolution | Revolve an XY sketch about its Y axis, mapping sketch X to radius and Y to output Z height. The entire profile must satisfy X ≥ 0; its linear extrusion height is ignored. Set 0 < angle ≤ 360°. |
+
+Fillet/chamfer are four-vertical-edge box operations; arbitrary edge picking is
+not available. Shell supports the convex profiles listed above, not arbitrary
+boolean or imported solids. Its wall is measured before source scaling; nonuniform
+scale changes physical thickness. Apply shell before transforming an edge-treated
+feature, then transform the shell result. Graphs are limited to 64 levels and
+10,000 expanded primitive instances; very complex evaluations can time out.
+
+For a ring, make an XY rectangle with width 5 mm, depth 20 mm and anchor X=10 mm,
+apply its extrusion, then choose **Revolution**. The result has inner radius 10 mm,
+outer radius 15 mm and height 20 mm. Edit the original sketch to change the ring.
+
+![Editable circular pattern and result transform](docs/images/advanced-pattern.png)
+
+## Align, distribute and place
+
+Expand **Align & distribute**. Choose a target, reference and axis, then align
+minimum bounds, centers or maximum bounds. **Center on origin** centers all three
+bounds axes; **Place on build plate** moves the minimum Z to zero. These commands
+measure actual world-space OpenSCAD STL geometry, including rotations, rather than
+using object origins. A reference depending on the target is rejected.
+
+For distribution, check at least three independent roots. Equal gaps uses actual
+widths and rejects a layout without enough space; equal centers may overlap.
+The outer objects stay fixed. Each action is one undo step. Boolean results get
+a reversible transform group; source operands remain intact. Measuring can be
+canceled and rejects results if the design changes before completion.
+
+## Mechanical templates
+
+Expand **Mechanical templates**, choose a template and **Add mechanical template**.
+Edit its dimensional controls in the inspector; bounds are derived from those
+parameters. Templates start at Z=0 and support normal transforms and booleans.
+
+- **Enclosure:** open-top box, wall/floor thickness, rounded vertical corners,
+  optional four mounting posts and optional through-holes in posts and floor.
+  Mounting inset is measured from the outer edges; posts and holes follow width
+  and depth edits. Invalid wall/post fits are rejected.
+- **Spacer / Standoff:** outer/bore diameters and height; standoff adds a flange.
+  A zero bore creates a solid post.
+- **Hole cutter:** clearance, counterbore or countersink solid. Nominal diameter
+  plus allowance gives the shaft diameter. Head diameter and recess depth or
+  countersink angle set the opening. Position it through your part and subtract
+  it with **Difference**; adding the cutter alone does not create a hole.
+- **Mounting tab:** rounded rectangular tab with a dimensioned offset hole.
+- **Alignment pin:** shaft with a tapered tip, with configurable dimensions.
+- **Snap-fit reference:** cantilever beam with a triangular latch ramp. This is
+  reference geometry; it does not calculate strain, material strength or fit.
+
+Printer tolerances, material behavior and snap-fit strength require physical
+validation. The supplied enclosure example is 120 × 60 × 30 mm with a 3 mm floor,
+four 8 mm posts and 3 mm through-holes. Open
+[`parametric-enclosure.forma3d`](examples/forma3d/parametric-enclosure.forma3d) to
+change its parameters; the adjacent STL is actual kernel output.
+
+![Parametric enclosure with posts and holes](docs/images/mechanical-enclosure.png)
+
+Mesh import remains deferred. These tools operate on the document's native
+parametric geometry.

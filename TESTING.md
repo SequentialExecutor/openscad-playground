@@ -238,3 +238,81 @@ and plane-bound assertions were added. The checked-in example was independently
 reopened with the final decoder: schema 3, rectangle area 1800 mm², zero free
 variables, STL dimensions 60 × 30 × 12 mm, closed edge topology and volume
 21261.2527609 mm³. This agrees with the 64-segment 6 mm hole through the plate.
+
+## Schema-4 advanced modeling
+
+The new `advanced-modeling.test.ts` adds six unit cases. The combined suite now
+executes 31 assertions covering model/schema validation, migrations, graph roots,
+modeling parameters, dependency restrictions, instance budgets, template fits,
+measured-bounds positioning, solver behavior, native containers and topology.
+The complete command is:
+
+```sh
+node --import ./server/node_modules/tsx/dist/loader.mjs --test \
+  tests/foundation.test.tsx tests/studio-document.test.ts \
+  tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts \
+  tests/advanced-modeling.test.ts
+```
+
+`studio-advanced.test.js` exercises real application controls and OpenSCAD binary
+STL, including volume, finite bounds and paired, consistently oriented triangle
+edges. Cases cover:
+
+- Four-vertical-edge box fillet/radius changes and true chamfer setbacks; open
+  and closed shells, and a shell derived from a filleted box. Rounded-shell
+  expected volume accounts for the actual 64-segment outline's uniform inset.
+- Mirrors, editable linear/circular patterns, result transforms and preserved
+  source poses. The result gizmo receives actual mouse events, changes the final
+  kernel mesh and commits exactly one undo step.
+- Positive/negative sketch offsets and full/partial revolutions with analytically
+  checked dimensions and volumes.
+- Enclosure width changes with four posts/holes: new hole positions, old hole
+  positions, floor/post heights, saved parameters and native reload.
+- Counterbore and countersink subtraction with measured recess depths/volumes,
+  plus spacer, standoff, tab, pin and snap-reference exports.
+- Exact-bounds distribution, alignment, plate placement and group transforms.
+
+The checked-in enclosure example was independently decoded as schema 4 and its
+STL inspected: 2,604 triangles, bounds (−60, −30, 0) to (60, 30, 30) mm, one shell,
+closed edge topology, no boundary/non-manifold/inconsistent edges or invalid,
+degenerate or duplicate triangles, and volume 50184.0386307 mm³. This is geometry
+validation, not a material-strength or slicer certification.
+
+All six documentation screenshots are captured from the production application.
+The enclosure capture orbits the real viewport to expose all four posts; the
+circular pattern capture shows the independent result transform controls. The
+capture script retains the four earlier workflows and closes all browser/server
+resources. Mesh import remains deferred and is not counted as implemented.
+
+
+The full development run passed 74 browser tests across eight suites, with four
+suites/26 tests conditionally skipped by the existing test conditions. It ran
+before the final numeric rejected-value display fix. The final unit run executes
+and passes all 31 assertions; production build and strict type check pass.
+Webpack's existing bundle/WASM size warnings remain.
+
+A rejected numeric edit now restores the accepted document value in the input.
+The advanced production regression attempts an invalid 100 mm fillet radius,
+checks the visible value returns to 4 mm, then verifies the kernel volume remains
+unchanged. Unchanged-field precision protection remains active.
+
+The final production command uses the temporary server configuration described
+above and executes all visual workflows plus representative Code/bundle checks:
+
+```sh
+NODE_ENV=production E2E_BASE_URL=http://localhost:3000/dist/ \
+JEST_PUPPETEER_CONFIG=/tmp/forma-prod-puppeteer.cjs \
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+npm run test:e2e -- --runInBand \
+  tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js \
+  tests/studio-advanced.test.js tests/e2e.test.js tests/bundle.test.js \
+  --testNamePattern='Forma3D visual foundation|Editable boolean geometry|Parametric sketch extrusion|Advanced parametric modeling|load the default page|can render cube|displayed model is a valid GLB|syntax error markers|bundle'
+```
+
+Final production validation passed all 30 selected checks across six suites,
+including all 23 visual workflows. Forty-five other tests were excluded by the
+explicit name filter, rather than executed and passed. The rejected-radius
+regression passed against the final build. The full development record above
+and the final production record have different scopes and are not combined into
+a single test count. All six screenshots were refreshed against the final build;
+`git diff --cached --check` passed.

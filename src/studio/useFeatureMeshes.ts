@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Design, generateScad, rootNodes } from "./document";
+import { Design, generateScad, rootNodes, isTransformable } from "./document";
 import { evaluateExact } from "./evaluate";
 export interface FeatureMesh {
   source: string;
@@ -11,16 +11,20 @@ export function useFeatureMeshes(design: Design, selected?: string) {
   const [progress, setProgress] = useState("");
   const cache = useRef(new Map<string, ArrayBuffer>());
   const roots = rootNodes(design).filter(
-    (node) => "inputs" in node || node.kind === "extrusion",
+    (node) =>
+      "inputs" in node || node.kind === "extrusion" || node.kind === "template",
   );
-  const operand = design.bodies.find(
-    (b) => b.id === selected && b.kind === "extrusion" && b.visible,
+  const operand = [...design.bodies, ...design.features].find(
+    (n) =>
+      n.id === selected &&
+      n.visible &&
+      ("inputs" in n || n.kind === "extrusion" || n.kind === "template"),
   );
   if (operand && !roots.some((n) => n.id === operand.id)) roots.push(operand);
   const sources = roots.map((node) => ({
     id: node.id,
     source: generateScad(
-      "kind" in node && node.kind === "extrusion"
+      isTransformable(node)
         ? {
             ...design,
             bodies: design.bodies.map((b) =>
@@ -32,6 +36,16 @@ export function useFeatureMeshes(design: Design, selected?: string) {
                     scale: [1, 1, 1],
                   }
                 : b,
+            ),
+            features: design.features.map((f) =>
+              f.id === node.id && isTransformable(f)
+                ? {
+                    ...f,
+                    position: [0, 0, 0],
+                    rotation: [0, 0, 0],
+                    scale: [1, 1, 1],
+                  }
+                : f,
             ),
           }
         : design,

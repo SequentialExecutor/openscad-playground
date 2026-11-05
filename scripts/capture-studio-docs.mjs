@@ -126,7 +126,69 @@ try {
     path: path.join(root, "docs/images/sketch-editor.png"),
   });
   await click("Cancel sketch");
-  console.log("Captured four real application screenshots in docs/images");
+  await page
+    .$("input[type=file]")
+    .then((input) =>
+      input.uploadFile(
+        path.join(root, "examples/forma3d/parametric-enclosure.forma3d"),
+      ),
+    );
+  await page.waitForFunction(() =>
+    document.querySelector('button[aria-label="Select Enclosure"]'),
+  );
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".studio-legend")].some((el) =>
+        el.textContent.includes("Exact geometry up to date"),
+      ),
+    { timeout: 60000 },
+  );
+  await page.click('button[aria-label="Select Enclosure"]');
+  await click("Fit all");
+  await frame();
+  // Orbit the actual viewport to reveal all four mounting posts above the walls.
+  const enclosureCanvas = await (await page.$("canvas")).boundingBox();
+  const orbitX = enclosureCanvas.x + enclosureCanvas.width * 0.85;
+  const orbitY = enclosureCanvas.y + enclosureCanvas.height * 0.15;
+  await page.mouse.move(orbitX, orbitY);
+  await page.mouse.down();
+  await page.mouse.move(orbitX, orbitY + enclosureCanvas.height * 0.13, {
+    steps: 12,
+  });
+  await page.mouse.up();
+  await frame();
+  await page.screenshot({
+    path: path.join(root, "docs/images/mechanical-enclosure.png"),
+  });
+  page.once("dialog", (d) => d.accept());
+  await click("New");
+  await click("＋ box");
+  const number = async (label, value) => {
+    const input = await page.$(`input[aria-label="${label}"]`);
+    await input.focus();
+    await input.evaluate((el) => el.select());
+    await page.keyboard.type(String(value));
+    await page.keyboard.press("Enter");
+  };
+  for (const label of ["Width (mm)", "Depth (mm)", "Height (mm)"])
+    await number(label, 10);
+  await number("position X", 30);
+  await number("position Z", 5);
+  await page.click(".studio-modeling summary");
+  await click("Circular pattern");
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".studio-legend")].some((el) =>
+        el.textContent.includes("Exact geometry up to date"),
+      ),
+    { timeout: 60000 },
+  );
+  await click("Fit all");
+  await frame();
+  await page.screenshot({
+    path: path.join(root, "docs/images/advanced-pattern.png"),
+  });
+  console.log("Captured six real application screenshots in docs/images");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));
