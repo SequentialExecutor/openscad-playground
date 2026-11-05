@@ -32,11 +32,23 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
   shell/small-dimension heuristics are provided.
 - Resizable side panels on desktop; wrapping tools and properties on narrow
   screens. Full layout persistence and collapsible panels remain future work.
+- Rectangle, circle and polygon/polyline sketch editing with grid, origin and
+  endpoint snapping; pointer drawing/vertex manipulation and numeric point entry.
+- Deterministic linear constraint solving with explicit rank/remaining degrees
+  of freedom: fixed coordinates, horizontal/vertical, coincident, signed X/Y
+  dimensions and axis-aligned equal lengths. Inconsistent systems are rejected.
+- Principal-plane XY/XZ/YZ linear extrusion and dependent boolean recomputation.
+  Only closed, nondegenerate, non-self-intersecting profiles may be applied.
+- Applied sketch constraints, extrusion parameters and IDs persist in native
+  projects and autosave. Older schema-1/2 documents migrate to schema 3.
 - Earlier customizer zero/empty-value and 3MF build-UUID fixes retained.
 
 ## Not implemented yet
 
-Sketches/constraints/extrusion; shell/fillet/chamfer; patterns; multi-selection;
+Arcs, arbitrary-face sketches, multiple contours and general nonlinear constraints;
+shell/fillet/chamfer; patterns; multi-selection; standalone/open-sketch persistence;
+additional primitives/text, rotational extrusion and offset; grouping, alignment,
+mirroring/distribution and clipboard commands;
 mesh import and repair; imported project assets and recent projects; persistent
 camera/workspace arrangement; interactive point/angle measurement, arbitrary wall-thickness analysis and mechanical templates.
 Only four camera presets and world-space move/rotate are currently exposed.

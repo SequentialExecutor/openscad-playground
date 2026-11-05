@@ -1,4 +1,10 @@
 import {
+  Extrusion,
+  validateExtrusion,
+  extrusionSize,
+  extrusionScad,
+} from "./sketch";
+import {
   defaultPrintSettings,
   validatePrintSettings,
   PrintSettings,
@@ -9,7 +15,8 @@ export type Shape = "box" | "sphere" | "cylinder" | "cone";
 export interface Body {
   id: string;
   name: string;
-  kind: Shape;
+  kind: Shape | "extrusion";
+  extrusion?: Extrusion;
   size: Vec3;
   position: Vec3;
   rotation: Vec3;
@@ -26,7 +33,7 @@ export interface BooleanFeature {
   visible: boolean;
 }
 export interface Design {
-  version: 2;
+  version: 3;
   name: string;
   units: "mm";
   bodies: Body[];
@@ -39,7 +46,7 @@ export interface History {
   future: Design[];
 }
 export const blankDesign = (): Design => ({
-  version: 2,
+  version: 3,
   features: [],
   print: structuredClone(defaultPrintSettings),
   name: "Untitled design",
@@ -64,10 +71,14 @@ export function validateDesign(input: unknown): Design {
     throw Error("Project must be an object.");
   const raw = input as { version?: unknown };
   const d = (
-    raw.version === 1 ? { ...input, version: 2, features: [] } : input
+    raw.version === 1
+      ? { ...input, version: 3, features: [] }
+      : raw.version === 2
+        ? { ...input, version: 3 }
+        : input
   ) as Design;
   if (
-    d.version !== 2 ||
+    d.version !== 3 ||
     d.units !== "mm" ||
     typeof d.name !== "string" ||
     d.name.length > 200 ||
@@ -82,7 +93,7 @@ export function validateDesign(input: unknown): Design {
   for (const b of d.bodies) {
     if (
       !b ||
-      !["box", "sphere", "cylinder", "cone"].includes(b.kind) ||
+      !["box", "sphere", "cylinder", "cone", "extrusion"].includes(b.kind) ||
       typeof b.id !== "string" ||
       !b.id ||
       ids.has(b.id) ||
@@ -108,6 +119,13 @@ export function validateDesign(input: unknown): Design {
         throw Error(`${key} must be positive.`);
     }
   }
+  const sketchIds = new Set<string>();
+  for (const b of d.bodies)
+    if (b.kind === "extrusion") {
+      const e = validateExtrusion(b.extrusion!);
+      if (sketchIds.has(e.sketch.id)) throw Error("Duplicate sketch ID.");
+      sketchIds.add(e.sketch.id);
+    }
   for (const f of d.features) {
     if (
       !f ||
@@ -126,6 +144,8 @@ export function validateDesign(input: unknown): Design {
       throw Error("Invalid boolean feature or duplicate ID/operand.");
     ids.add(f.id);
   }
+  for (const id of sketchIds)
+    if (ids.has(id)) throw Error("Sketch and node IDs must be distinct.");
   const features = new Map(d.features.map((f) => [f.id, f]));
   const visiting = new Set<string>();
   const depths = new Map<string, number>();
@@ -148,7 +168,7 @@ export function validateDesign(input: unknown): Design {
   for (const id of ids) visit(id);
   // Strip unrecognized fields so imported data cannot alter runtime-only state.
   return {
-    version: 2,
+    version: 3,
     print: {
       build: [...print.build],
       nozzle: print.nozzle,
@@ -169,7 +189,10 @@ export function validateDesign(input: unknown): Design {
       id: b.id,
       name: b.name,
       kind: b.kind,
-      size: [...b.size],
+      size: b.kind === "extrusion" ? extrusionSize(b.extrusion!) : [...b.size],
+      ...(b.kind === "extrusion"
+        ? { extrusion: validateExtrusion(b.extrusion!) }
+        : {}),
       position: [...b.position],
       rotation: [...b.rotation],
       scale: [...b.scale],
@@ -246,11 +269,13 @@ export function generateScad(design: Design, roots?: string[]): string {
         return `module ${name}() { ${node.operation}() { ${node.inputs.map((id) => `n${byId.get(id)!.index}();`).join(" ")} } }`;
       const b = node;
       const solid =
-        b.kind === "box"
-          ? `cube(${JSON.stringify(b.size)}, center=true);`
-          : b.kind === "sphere"
-            ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
-            : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
+        b.kind === "extrusion"
+          ? extrusionScad(b.extrusion!)
+          : b.kind === "box"
+            ? `cube(${JSON.stringify(b.size)}, center=true);`
+            : b.kind === "sphere"
+              ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
+              : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
       return `module ${name}() { translate(${JSON.stringify(b.position)}) rotate(${JSON.stringify(b.rotation)}) scale(${JSON.stringify(b.scale)}) ${solid} }`;
     });
   return (
@@ -260,4 +285,16 @@ export function generateScad(design: Design, roots?: string[]): string {
     output.map((id) => `n${byId.get(id)!.index}();`).join("\n") +
     "\n"
   );
+}
+
+export function createExtrusion(extrusion: Extrusion): Body {
+  const e = validateExtrusion(extrusion);
+  return {
+    ...createBody("box"),
+    name: "Sketch extrusion",
+    kind: "extrusion",
+    position: [0, 0, 0],
+    size: extrusionSize(e),
+    extrusion: e,
+  };
 }

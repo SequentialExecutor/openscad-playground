@@ -32,7 +32,7 @@ Visual Design are separate documents; generated SCAD is read-only.
 
 Exported STL is in millimeters; many STL readers assume a unit because STL itself
 has no reliable unit metadata. Final geometry from multiple visible bodies is
-unioned by OpenSCAD. Mesh imports, sketches and manufacturing templates are still pending.
+unioned by OpenSCAD. Mesh imports and manufacturing templates are still pending.
 Mesh inspection does not guarantee printability.
 
 
@@ -65,3 +65,53 @@ The report does not check all wall thicknesses, self-intersections or support
 requirements. STL volume assumes consistent material/cavity shell winding.
 The edge weld tolerance is 0.00001 mm, and analysis supports up to 250,000 triangles.
 Printer settings are included in autosave and native project files.
+
+## Screenshots
+
+![Visual modeling workspace](docs/images/studio-overview.png)
+
+The hierarchy and inspector stay synchronized with the selected solid.
+
+![Editable subtraction](docs/images/editable-boolean.png)
+
+The cube and cylinder remain editable operands of the Difference feature.
+
+![Mesh inspection](docs/images/mesh-analysis.png)
+
+The report comes from actual evaluated triangles; heuristic warnings are labeled.
+
+## Sketch profiles and extrusion
+
+Choose **Sketch & extrude**. The sketch editor opens a separate draft transaction;
+**Apply extrusion** commits one undo step and **Cancel sketch** keeps the previous
+solid. Unapplied sketches cannot be saved/exported, and navigation warns about the
+draft. Applied profiles and constraints participate in project recovery.
+
+- **Rectangle** exposes width, depth and its fixed first-corner anchor. Its
+  horizontal/vertical and dimensional constraints are verified by the solver.
+- **Circle** exposes radius and center. The default center/radius constraints
+  completely determine it. Removed dimensions can be restored explicitly.
+- **Polygon / polyline** supports clicking points, grid/endpoint/origin snapping,
+  dragging free vertices, or precise **Point X/Y** plus **Add point** entry.
+  Close the profile before applying. Open, zero-length, degenerate and
+  self-intersecting profiles are reported and cannot be extruded.
+- The constraints panel supports fixed coordinates, horizontal/vertical edges,
+  coincident points, signed X/Y distances and equal lengths for axis-aligned
+  segments. The status reports the solver's remaining degrees of freedom;
+  underconstrained polygons are not labeled fully constrained.
+- Choose XY (extrude +Z), XZ (extrude −Y), or YZ (extrude +X), and a positive
+  extrusion height. Use **Fit profile** or zoom controls when a dimension changes
+  beyond the current view. The profile origin is retained, not recentered.
+
+Select an extrusion in Objects to change its height, **Edit sketch**, or use
+normal transform gizmos. Boolean features can reference the extrusion. Editing a
+sketch dimension then recomputes dependent geometry; undo restores the prior
+profile and exact result.
+
+![Verified rectangular constraints and extrusion dimensions](docs/images/sketch-editor.png)
+
+Profiles are limited to 64 points and 256 constraints. General nonlinear
+constraints, arcs, multiple-contour sketches and arbitrary-face attachment are
+not available. Coincident endpoints can close a profile even without its explicit
+closing edge. Draft point positions are transient until Apply; the last valid
+applied document remains intact after invalid edits or worker errors.

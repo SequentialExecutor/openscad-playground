@@ -1,3 +1,5 @@
+import SketchEditor from "./SketchEditor";
+import { Extrusion, rectangleSketch } from "./sketch";
 import { encodeProject, decodeProject } from "./project-file";
 import Numeric from "./Numeric";
 import React, { useEffect, useRef, useState } from "react";
@@ -7,6 +9,7 @@ import {
   rootNodes,
   blankDesign,
   createBody,
+  createExtrusion,
   execute,
   generateScad,
   redo,
@@ -49,11 +52,18 @@ export default function Studio() {
   const [analyzing, setAnalyzing] = useState(false);
   const design = history.present;
   const printSettings = design.print;
-  const exactFeatures = useFeatureMeshes(design);
+
   const nodes = [...design.bodies, ...design.features];
   const current = useRef(design);
   current.current = design;
   const [selected, setSelected] = useState<string>();
+  const exactFeatures = useFeatureMeshes(design, selected);
+  const [editingSketch, setEditingSketch] = useState<{
+    bodyId?: string;
+    value: Extrusion;
+  }>();
+  const sketchActive = useRef(false);
+  sketchActive.current = !!editingSketch;
   const feature = design.features.find((f) => f.id === selected);
   const [draft, setDraft] = useState<Body>();
   const dragActive = useRef(false);
@@ -166,6 +176,7 @@ export default function Studio() {
           body.position[2],
         ] as Vec3,
       };
+      if (b.extrusion) b.extrusion.sketch.id = crypto.randomUUID();
       commit({ ...design, bodies: [...design.bodies, b] });
       setSelected(b.id);
     }
@@ -176,7 +187,7 @@ export default function Studio() {
   };
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
-      if (dragActive.current) return;
+      if (dragActive.current || sketchActive.current) return;
       if (
         (e.target as HTMLElement)?.closest(
           "input,textarea,select,[contenteditable=true]",
@@ -197,7 +208,7 @@ export default function Studio() {
   }, []);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (unsaved.current) {
+      if (unsaved.current || sketchActive.current) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -306,7 +317,7 @@ export default function Studio() {
   const source = generateScad(design);
   return (
     <main className="studio">
-      <header>
+      <header inert={!!editingSketch}>
         <div>
           <strong>
             Forma<span>3D</span> Studio
@@ -315,9 +326,9 @@ export default function Studio() {
         </div>
         <a href={`?${location.hash}`}>Open Code workspace ↗</a>
       </header>
-      <nav aria-label="Project tools">
+      <nav aria-label="Project tools" inert={!!editingSketch}>
         <button
-          disabled={!ready}
+          disabled={!ready || !!editingSketch}
           onClick={() => {
             if (
               window.confirm(
@@ -331,10 +342,16 @@ export default function Studio() {
         >
           New
         </button>
-        <button disabled={!ready} onClick={() => fileInput.current?.click()}>
+        <button
+          disabled={!ready || !!editingSketch}
+          onClick={() => fileInput.current?.click()}
+        >
           Open project
         </button>
-        <button disabled={!ready} onClick={() => void saveProject()}>
+        <button
+          disabled={!ready || !!editingSketch}
+          onClick={() => void saveProject()}
+        >
           Save project
         </button>
         <input
@@ -369,7 +386,7 @@ export default function Studio() {
         </button>
         <span className="studio-divider" />
         <button
-          disabled={busy || !rootNodes(design).length}
+          disabled={busy || !!editingSketch || !rootNodes(design).length}
           onClick={() => void exportStl()}
         >
           Export exact STL
@@ -391,12 +408,20 @@ export default function Studio() {
           Generated SCAD
         </button>
       </nav>
-      <div className="studio-workspace" aria-busy={!ready}>
+      <div
+        className="studio-workspace"
+        aria-busy={!ready}
+        inert={!!editingSketch}
+      >
         <aside className="studio-left">
           <h2>Create a solid</h2>
           <div className="studio-primitives">
             {(["box", "sphere", "cylinder", "cone"] as Shape[]).map((kind) => (
-              <button key={kind} disabled={!ready} onClick={() => add(kind)}>
+              <button
+                key={kind}
+                disabled={!ready || !!editingSketch}
+                onClick={() => add(kind)}
+              >
                 ＋ {kind}
               </button>
             ))}
@@ -409,6 +434,16 @@ export default function Studio() {
               setSelected(f.id);
             }}
           />
+          <button
+            disabled={!ready || !!editingSketch}
+            onClick={() =>
+              setEditingSketch({
+                value: { height: 10, sketch: rectangleSketch() },
+              })
+            }
+          >
+            Sketch & extrude
+          </button>
           <h2>
             Objects <small>{nodes.length}</small>
           </h2>
@@ -578,39 +613,75 @@ export default function Studio() {
                 />
               </label>
               <p className="studio-muted">
-                {body.kind} • centered origin{body.locked ? " • locked" : ""}
+                {body.kind} •{" "}
+                {body.kind === "extrusion"
+                  ? "sketch origin"
+                  : "centered origin"}
+                {body.locked ? " • locked" : ""}
               </p>
-              <fieldset disabled={body.locked || !!draft}>
-                <legend>Dimensions (mm)</legend>
-                <p className="studio-muted">
-                  Unscaled local bounding dimensions
-                </p>
-                {(body.kind === "cylinder" || body.kind === "cone") && (
+              {body.kind === "extrusion" && body.extrusion && (
+                <fieldset disabled={body.locked || !!draft}>
+                  <legend>Sketch extrusion</legend>
+                  <button
+                    onClick={() =>
+                      setEditingSketch({
+                        bodyId: body.id,
+                        value: body.extrusion!,
+                      })
+                    }
+                  >
+                    Edit sketch
+                  </button>
                   <Numeric
-                    label="Diameter (mm)"
-                    value={body.size[0]}
+                    label="Extrusion height (mm)"
+                    value={body.extrusion.height}
                     positive
-                    onCommit={(v) =>
-                      changeBody({ ...body, size: [v, v, body.size[2]] })
+                    onCommit={(height) =>
+                      changeBody({
+                        ...body,
+                        extrusion: { ...body.extrusion!, height },
+                      })
                     }
                   />
-                )}
-                <div className="studio-values">
-                  {body.size.map((n, i) => (
+                  <p>
+                    Local bounds: {body.size.join(" × ")} mm • plane{" "}
+                    {body.extrusion.sketch.plane}
+                  </p>
+                </fieldset>
+              )}
+              {body.kind !== "extrusion" && (
+                <fieldset disabled={body.locked || !!draft}>
+                  <legend>Dimensions (mm)</legend>
+                  <p className="studio-muted">
+                    Unscaled local bounding dimensions
+                  </p>
+                  {(body.kind === "cylinder" || body.kind === "cone") && (
                     <Numeric
-                      key={i}
-                      label={`${["Width", "Depth", "Height"][i]} (mm)`}
-                      value={n}
+                      label="Diameter (mm)"
+                      value={body.size[0]}
                       positive
-                      onCommit={(v) => {
-                        const size = [...body.size] as Vec3;
-                        size[i] = v;
-                        changeBody({ ...body, size });
-                      }}
+                      onCommit={(v) =>
+                        changeBody({ ...body, size: [v, v, body.size[2]] })
+                      }
                     />
-                  ))}
-                </div>
-              </fieldset>
+                  )}
+                  <div className="studio-values">
+                    {body.size.map((n, i) => (
+                      <Numeric
+                        key={i}
+                        label={`${["Width", "Depth", "Height"][i]} (mm)`}
+                        value={n}
+                        positive
+                        onCommit={(v) => {
+                          const size = [...body.size] as Vec3;
+                          size[i] = v;
+                          changeBody({ ...body, size });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </fieldset>
+              )}
               {(["position", "rotation", "scale"] as const).map((key) => (
                 <fieldset key={key} disabled={body.locked || !!draft}>
                   <legend>
@@ -673,14 +744,33 @@ export default function Studio() {
             <summary>Current modeling limits</summary>
             <p>
               Primitive solids, editable booleans, native projects and bounded
-              mesh inspection are available. Sketches, mesh imports and advanced
-              solid operations are still pending. Mesh analysis does not certify
-              printability.
+              mesh inspection and sketch extrusions are available. Mesh imports
+              and advanced solid operations are still pending. Mesh analysis
+              does not certify printability.
             </p>
           </details>
         </aside>
       </div>
-      <footer role="status" aria-live="polite">
+      {editingSketch && (
+        <SketchEditor
+          initial={editingSketch.value}
+          onCancel={() => setEditingSketch(undefined)}
+          onApply={(extrusion) => {
+            if (editingSketch.bodyId) {
+              const old = design.bodies.find(
+                (b) => b.id === editingSketch.bodyId,
+              )!;
+              changeBody({ ...old, extrusion });
+            } else {
+              const b = createExtrusion(extrusion);
+              commit({ ...design, bodies: [...design.bodies, b] });
+              setSelected(b.id);
+            }
+            setEditingSketch(undefined);
+          }}
+        />
+      )}
+      <footer role="status" aria-live="polite" inert={!!editingSketch}>
         {status}
         <span>{saveStatus}</span>
         <span>

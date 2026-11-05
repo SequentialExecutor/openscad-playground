@@ -183,3 +183,58 @@ rounds to five decimals. The exact value is available in the field's tooltip.
 Unusual imported feature IDs use prototype-free lookup records; canonical
 validation strips unknown printer fields. Archive roundtrip tests include an
 unusual `__proto__` feature ID.
+
+## Schema-3 sketches and documentation screenshots
+
+The focused development run passed 11 browser workflows, including four sketch
+cases: dimensioned rectangle extrusion with a dependent hole/width change and
+undo/redo/reload; circular extrusion on YZ; pointer-drawn polygons with rejection
+of self-intersection; and precise numeric vertex entry. Kernel STL bounds and
+volume are inspected. The full development run passed 62 tests with 26 skipped
+by the suite's existing conditions.
+
+All 25 unit tests pass. Six sketch tests cover solver rank, dimensional
+propagation, inconsistent constraints, underconstrained/open/self-intersecting
+profiles, coincidence, axis-aligned equal length, circle parameters, plane frames,
+serialization and derived dimension validation. The original model/file/topology
+checks remain in the unit command:
+
+```sh
+node --import ./server/node_modules/tsx/dist/loader.mjs --test \
+  tests/foundation.test.tsx tests/studio-document.test.ts \
+  tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts
+```
+
+`examples/forma3d/sketch-plate.forma3d` and its STL were captured from the actual
+browser/kernel workflow. The 60 × 30 × 12 mm plate has a 6 mm through-hole.
+
+Documentation screenshots are actual production-app captures at 1600 × 1100,
+device pixel ratio 1, using system Chromium. The capture script runs a temporary
+local static server, opens the editable-hole native example, evaluates the actual
+model/inspection and opens a 40 × 30 mm sketch draft with 12 mm extrusion height.
+It closes its browser/server afterward. No screenshots were generated with mock
+geometry or manually overlaid controls. README.md and USER_GUIDE.md link all four
+images under `docs/images`.
+
+The final review makes background UI inert during a sketch transaction and keeps
+focus inside the modal when Escape cancels numeric input. General nonlinear
+constraints, arbitrary-face sketches, arcs, multiple contours and a second browser
+engine remain unverified/unsupported; no general constraint-solver claim is made.
+
+Final production validation for this increment passed 18 checks across five
+suites: all 11 visual workflows, four original Code-mode checks and three bundle
+checks. Forty-five other tests were excluded by the explicit name filter rather
+than executed and passed. Production build, strict type check and whitespace
+validation passed. The final sketch assertions also verify YZ minimum/maximum
+bounds, Escape focus retention and inert background controls.
+
+The full development suite passed 62 tests with 26 conditionally skipped tests.
+The selected production command extends the earlier command with
+`tests/studio-sketch.test.js` and `Parametric sketch extrusion` in its filter.
+No unsupported solver operation or unexecuted browser engine is counted as passing.
+
+A fresh production rerun of the four sketch cases passed after the final focus
+and plane-bound assertions were added. The checked-in example was independently
+reopened with the final decoder: schema 3, rectangle area 1800 mm², zero free
+variables, STL dimensions 60 × 30 × 12 mm, closed edge topology and volume
+21261.2527609 mm³. This agrees with the 64-segment 6 mm hole through the plate.

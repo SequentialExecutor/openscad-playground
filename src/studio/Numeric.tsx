@@ -54,10 +54,15 @@ export default function Numeric({
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
           if (e.key === "Escape") {
+            e.stopPropagation();
             canceled.current = true;
             edited.current = false;
             setText(String(value));
+            const dialog = e.currentTarget.closest<HTMLElement>(
+              '[role="dialog"][aria-modal="true"]',
+            );
             e.currentTarget.blur();
+            dialog?.focus();
           }
         }}
       />

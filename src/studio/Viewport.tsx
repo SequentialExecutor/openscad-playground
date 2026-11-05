@@ -171,7 +171,9 @@ export default function Viewport(props: ViewportProps) {
       );
       for (const b of latest.current.design.bodies.filter(
         (b) =>
-          b.visible && (roots.has(b.id) || b.id === latest.current.selected),
+          b.kind !== "extrusion" &&
+          b.visible &&
+          (roots.has(b.id) || b.id === latest.current.selected),
       )) {
         const g =
           b.kind === "box"
@@ -215,6 +217,17 @@ export default function Viewport(props: ViewportProps) {
             metalness: 0.12,
           }),
         );
+        const body = latest.current.design.bodies.find((b) => b.id === id);
+        if (body) {
+          setTransform(mesh, body);
+          if (!roots.has(id)) {
+            mesh.material.wireframe = true;
+            mesh.material.transparent = true;
+            mesh.material.opacity = 0.5;
+          }
+          if (id === latest.current.selected && !body.locked)
+            gizmo.attach(mesh);
+        }
         mesh.userData.id = id;
         solids.add(mesh);
       }

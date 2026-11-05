@@ -159,3 +159,36 @@ in a ZIP. The manifest pins the payload by SHA-256. Reads limit the input to
 unexpected versions and modified payloads. JSON remains a read-only legacy
 import path; new saves use the native container. Imported mesh assets, materials,
 sketches and additional payload files remain future schema work.
+
+## Schema 3: sketches and linear extrusion
+
+Bodies can now own a separately serialized `Extrusion` and `Sketch`, with stable
+sketch/constraint IDs. Schema-1/2 files migrate without changing their existing
+solids and boolean references. Sketch points and constraints are authoritative;
+`Body.size` is a derived local bounding dimension and is recomputed on validation.
+Duplicating an extrusion allocates a new sketch ID. Removing a final polygon
+point removes only constraints referencing that point.
+
+The deterministic RREF solver uses explicit scalar equations for fixed
+coordinates, horizontal/vertical edges, coincidence, signed coordinate spans
+and axis-aligned equal length. Free variables retain their initial point values.
+Rank determines the displayed degrees of freedom. Circle center/radius and the
+standard dimensioned rectangle are fully determined. Unsupported nonlinear
+operations are rejected rather than approximated as general constraints.
+
+The 2D editor keeps a transient draft until Apply; an invalid profile cannot
+replace the stored solid. Model export/save is blocked during a draft and browser
+navigation warns. Closed-profile checks reject zero-length, self-intersecting and
+degenerate outlines. The committed profile compiles to `linear_extrude` on XY,
+XZ or YZ with explicit plane frames. Boolean dependents reuse the same body ID.
+
+Extrusions are rendered from exact worker-generated local meshes, then receive
+the document's body transform in Three.js. Thus gizmo feedback is immediate and
+moving an extrusion can reuse its local mesh; a dependent boolean still evaluates
+its full world-space operand. Cached results are keyed by generated source and
+are never published for mismatched revisions. The sketch UI and data have no
+reverse conversion from arbitrary SCAD.
+
+Screenshots in `docs/images` are generated from the real production application
+by `scripts/capture-studio-docs.mjs`. They cover the workspace, editable boolean,
+inspection report and verified sketch constraints. No mock geometry is used.

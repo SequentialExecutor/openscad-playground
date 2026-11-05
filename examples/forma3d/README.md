@@ -16,3 +16,12 @@ The cylinder and cube remain separate editable operands of a difference feature.
 Change Cylinder's Diameter to 15 mm, then undo to restore 10 mm.
 `editable-hole.stl` is the actual WASM/Manifold export. Tests inspect its bounds,
 inner radius, volume and void through the center rather than only file existence.
+
+# Sketch plate with a dependent hole
+
+`sketch-plate.forma3d` contains a constrained 60 × 30 mm rectangle extruded 12 mm,
+with a 6 mm through-hole at (10, 10) mm. Edit Sketch extrusion's profile width:
+the referenced Difference feature recomputes while preserving both operands.
+The test changed width from 40 to 60 mm, undid/redid it, reloaded the project and
+checked the actual exported volume and bounds. `sketch-plate.stl` is that kernel
+export, not the viewport mesh.

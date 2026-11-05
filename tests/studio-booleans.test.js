@@ -75,7 +75,7 @@ async function exactReady() {
   await page.waitForFunction(
     () =>
       [...document.querySelectorAll(".studio-legend")].some((el) =>
-        el.textContent.includes("Exact boolean geometry up to date"),
+        el.textContent.includes("Exact geometry up to date"),
       ),
     { timeout: 60000 },
   );
@@ -212,7 +212,7 @@ describe("Editable boolean geometry", () => {
     await page.waitForFunction(
       () =>
         [...document.querySelectorAll(".studio-legend")].some((el) =>
-          el.textContent.includes("Boolean evaluation failed"),
+          el.textContent.includes("Geometry evaluation failed"),
         ),
       { timeout: 60000 },
     );

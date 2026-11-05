@@ -201,7 +201,8 @@ Send us a PR, then once it's merged request an update to the hosted https://ocha
 The visual CAD foundation is available through **Forma3D Studio · Visual Design**
 in the existing editor, or the `?studio=1` query parameter. It supports primitive
 solids, transform gizmos, editable boolean features, numeric editing, undo/redo,
-native projects, local recovery, exact STL export and worker-based mesh analysis. The full planned feature set is not yet implemented. See
+constrained sketch profiles and extrusion, native projects, local recovery, exact
+STL export and worker-based mesh analysis. The full planned feature set is not yet implemented. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the integration design,
 [FEATURES.md](FEATURES.md) for implemented versus planned functionality,
 [TESTING.md](TESTING.md) for commands, reproduced defects and build blockers,
@@ -211,7 +212,7 @@ native projects, local recovery, exact STL export and worker-based mesh analysis
 Foundation regression checks (after `npm ci` in both root and `server/`):
 
 ```sh
-node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts
 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node tests/foundation-browser.mjs
 ```
 
@@ -230,8 +231,26 @@ npm start
 For automated visual workflows, with system Chromium installed:
 
 ```sh
-CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js
 ```
 
 Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.
 See [FEATURES.md](FEATURES.md) for the precise supported subset and limitations.
+
+### Screenshots
+
+These screenshots show the actual browser application and WASM-generated geometry.
+
+![Forma3D visual workspace](docs/images/studio-overview.png)
+
+![Editable boolean hole and preserved operands](docs/images/editable-boolean.png)
+
+![Exact mesh inspection and printer settings](docs/images/mesh-analysis.png)
+
+Regenerate them after a production build with:
+
+```sh
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node scripts/capture-studio-docs.mjs
+```
+
+![Dimensioned sketch and extrusion editor](docs/images/sketch-editor.png)

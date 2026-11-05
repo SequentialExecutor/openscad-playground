@@ -6,25 +6,52 @@ export interface FeatureMesh {
   data: ArrayBuffer;
 }
 /** Hide invalidated results immediately; cache only exact outputs for identical source. */
-export function useFeatureMeshes(design: Design) {
+export function useFeatureMeshes(design: Design, selected?: string) {
   const [meshes, setMeshes] = useState<Record<string, FeatureMesh>>({});
   const [progress, setProgress] = useState("");
   const cache = useRef(new Map<string, ArrayBuffer>());
-  const roots = rootNodes(design).filter((node) => "inputs" in node);
+  const roots = rootNodes(design).filter(
+    (node) => "inputs" in node || node.kind === "extrusion",
+  );
+  const operand = design.bodies.find(
+    (b) => b.id === selected && b.kind === "extrusion" && b.visible,
+  );
+  if (operand && !roots.some((n) => n.id === operand.id)) roots.push(operand);
   const sources = roots.map((node) => ({
     id: node.id,
-    source: generateScad(design, [node.id]),
+    source: generateScad(
+      "kind" in node && node.kind === "extrusion"
+        ? {
+            ...design,
+            bodies: design.bodies.map((b) =>
+              b.id === node.id
+                ? {
+                    ...b,
+                    position: [0, 0, 0],
+                    rotation: [0, 0, 0],
+                    scale: [1, 1, 1],
+                  }
+                : b,
+            ),
+          }
+        : design,
+      [node.id],
+    ),
   }));
   const key = JSON.stringify(sources);
   useEffect(() => {
     let active = true;
     let job: ReturnType<typeof evaluateExact> | undefined;
     const pending: Record<string, FeatureMesh> = Object.create(null);
+    for (const { id, source } of sources) {
+      const data = cache.current.get(source);
+      if (data) pending[id] = { source, data };
+    }
     const timer = setTimeout(async () => {
       for (let i = 0; i < sources.length; i++) {
         const { id, source } = sources[i];
         if (!active) return;
-        setProgress(`Evaluating boolean ${i + 1} of ${sources.length}…`);
+        setProgress(`Evaluating exact feature ${i + 1} of ${sources.length}…`);
         try {
           let data = cache.current.get(source);
           if (!data) {
@@ -47,16 +74,23 @@ export function useFeatureMeshes(design: Design) {
         } catch (e) {
           if (active) {
             setProgress(
-              `Boolean evaluation failed (the result may be empty): ${e}`,
+              `Geometry evaluation failed (the result may be empty): ${e}`,
             );
             return;
           }
         }
       }
       if (active)
-        setProgress(sources.length ? "Exact boolean geometry up to date" : "");
+        setProgress(sources.length ? "Exact geometry up to date" : "");
     }, 350);
-    setMeshes({});
+    setMeshes({ ...pending });
+    setProgress(
+      sources.length
+        ? Object.keys(pending).length === sources.length
+          ? "Exact geometry up to date"
+          : "Waiting for exact geometry…"
+        : "",
+    );
     return () => {
       active = false;
       clearTimeout(timer);
