@@ -157,7 +157,8 @@ Native container version 1 (`.forma3d`) stores `manifest.json` and `project.json
 in a ZIP. The manifest pins the payload by SHA-256. Reads limit the input to
 5 MB, stream-limit expanded JSON to 2 MB, whitelist archive paths and reject
 unexpected versions and modified payloads. JSON remains a read-only legacy
-import path; new saves use the native container. Imported mesh assets, materials and additional payload files remain future schema work.
+import path; new saves use the native container. At this checkpoint, imported mesh assets and additional payloads remained future
+work; schema 5 below implements geometry assets. Materials remain unsupported.
 Sketches are stored in the schema-3/4 JSON payload described below.
 
 ## Schema 3: sketches and linear extrusion
@@ -250,3 +251,47 @@ Enclosure mounting disks are checked against the cavity's straight sides and
 Countersink fit checks use shaft/head diameters and angle to derive conical depth;
 only counterbores apply the stored counterbore-depth limit. No schema change or
 automatic movement of existing mounting parameters is introduced.
+
+
+## Schema 5 and mesh-backed native containers
+
+`mesh-import.ts` parses local STL/OBJ, core 3MF and static embedded glTF/GLB in a
+bundler-managed worker. It applies 3MF component/build transforms, glTF scene
+instances and Y-up/Z-up conversion, checks explicit/declared units, and normalizes
+float32 triangles to millimeters. Limits bound input size, scene depth/instances,
+triangles, ZIP entries and expanded XML/buffer data. XML entities/DTDs and external
+geometry buffers/parts are rejected; materials and CAD history are not reconstructed.
+Import publication has cancellation, a 30-second timeout and revision guards.
+
+`mesh-asset.ts` owns bounded canonical binary STL, source metadata, SHA-256 IDs
+and a bounded topology/data cache. Schema-5 bodies reference immutable geometry
+assets and hold independent transforms plus their own import-unit provenance.
+Validated dimensions come from actual vertices. Assets are shared by duplication;
+unused entries are pruned. Schema-1/2/3/4 documents migrate with empty mesh assets.
+Startup recovery verifies asset hashes before allowing autosave, preserving the
+failed-read protection introduced in the preceding repair.
+
+The viewport renders imported source triangles directly, including open meshes,
+and attaches the normal selection/gizmo controls. Known closed-edge topology
+permits solid feature inputs. Exact OpenSCAD evaluation mounts only source-referenced
+assets as local binary STL data, with the normal cancellation/stale-result guards.
+Open or defective imports are blocked from solid evaluation rather than silently
+repaired. Imported assets never supply arbitrary source paths or remote URLs.
+
+Native container v2 separates bounded JSON metadata from `meshes/<sha256>.stl`
+entries. A manifest whitelists and hashes the document and each asset; archive
+reads stream-limit expansion, reject unsafe/unexpected paths and check content
+hashes. Native container v1 remains readable and is still written when no meshes
+are present. `scad-bundle.ts` packages generated relative imports and their STL
+files together for a portable desktop OpenSCAD download.
+
+The setup guide in RUN_FORMA3D.md documents the verified clean installation and
+limits. The root lockfile overrides Monaco's pinned DOMPurify dependency with
+compatible 3.4.17 after the systems audit identified advisories in 3.4.15.
+Runtime Code-mode Monaco loading from its existing CDN remains an external asset
+path; a clean npm audit describes installed dependency trees, not every CDN payload.
+
+The viewport drawing buffer is resized on the next animation frame, without
+writing layout dimensions from ResizeObserver. An absolutely positioned canvas
+prevents intrinsic size feedback in wrapping narrow-screen layouts. Pending
+resize callbacks are canceled on disposal.

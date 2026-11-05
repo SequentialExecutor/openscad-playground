@@ -185,6 +185,49 @@ describe("Forma3D visual foundation", () => {
     await click("Undo");
     expect(await page.$$eval(".studio-tree li", (els) => els.length)).toBe(0);
   });
+  test("responsive canvas resizing keeps real pointer controls usable without runtime overlays", async () => {
+    const errors = [];
+    const onError = (error) => errors.push(error.message);
+    page.on("pageerror", onError);
+    try {
+      await page.setViewport({ width: 800, height: 600 });
+      await page.evaluate(
+        () =>
+          new Promise((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(r)),
+          ),
+      );
+      const box = await page.evaluateHandle(() =>
+        [...document.querySelectorAll("button")].find(
+          (b) => b.textContent.trim() === "＋ box",
+        ),
+      );
+      await box.asElement().click();
+      await box.dispose();
+      await page.waitForSelector('input[aria-label="Width (mm)"]');
+      for (const size of [
+        { width: 360, height: 740 },
+        { width: 1440, height: 900 },
+        { width: 800, height: 600 },
+      ]) {
+        await page.setViewport(size);
+        await click("Orthographic");
+        await page.evaluate(
+          () =>
+            new Promise((r) =>
+              requestAnimationFrame(() => requestAnimationFrame(r)),
+            ),
+        );
+        expect(await page.$("#webpack-dev-server-client-overlay")).toBeNull();
+      }
+      expect(stlBounds(await captureDownload("Export exact STL")).size).toEqual(
+        [20, 20, 20],
+      );
+      expect(errors).toEqual([]);
+    } finally {
+      page.off("pageerror", onError);
+    }
+  }, 90000);
   test("project import validates input without destroying the current document", async () => {
     const fs = require("fs");
     await click("＋ sphere");

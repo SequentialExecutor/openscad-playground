@@ -1,7 +1,16 @@
+import {
+  MeshAsset,
+  verifyMeshAssets,
+  meshInfo,
+  meshDigest,
+  toBase64,
+  MAX_MESH_BYTES,
+  MAX_PROJECT_MESH_BYTES,
+} from "./mesh-asset";
 import JSZip from "jszip";
 import { Design, validateDesign } from "./document";
 const MAX_DOCUMENT = 2 * 1024 * 1024;
-const MAX_ARCHIVE = 5 * 1024 * 1024;
+const MAX_ARCHIVE = 25 * 1024 * 1024;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 async function digest(data: Uint8Array<ArrayBuffer>): Promise<string> {
@@ -13,27 +22,46 @@ async function digest(data: Uint8Array<ArrayBuffer>): Promise<string> {
 export async function encodeProject(
   design: Design,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const project = encoder.encode(JSON.stringify(validateDesign(design)));
+  const valid = validateDesign(design);
+  const project = encoder.encode(
+    JSON.stringify({
+      ...valid,
+      meshAssets: valid.meshAssets.map(({ data, ...metadata }) => metadata),
+    }),
+  );
   if (project.byteLength > MAX_DOCUMENT)
     throw Error("Project document exceeds 2 MB.");
   const zip = new JSZip();
   zip.file("project.json", project);
+  const meshes = [];
+  for (const asset of valid.meshAssets) {
+    const data = meshInfo(asset).data;
+    if ((await meshDigest(data)) !== asset.id)
+      throw Error("Mesh integrity check failed.");
+    const path = `meshes/${asset.id}.stl`;
+    zip.file(path, data, { createFolders: false });
+    meshes.push({ id: asset.id, path, sha256: asset.id });
+  }
   zip.file(
     "manifest.json",
     JSON.stringify({
       format: "forma3d",
-      version: 1,
+      version: meshes.length ? 2 : 1,
+      ...(meshes.length ? { meshes } : {}),
       document: "project.json",
       sha256: await digest(project),
     }),
   );
-  return new Uint8Array(
+  const result = new Uint8Array(
     await zip.generateAsync({
       type: "uint8array",
       compression: "DEFLATE",
       compressionOptions: { level: 6 },
     }),
   );
+  if (result.byteLength > MAX_ARCHIVE)
+    throw Error("Project archive exceeds 25 MB.");
+  return result;
 }
 /** Stream with a hard expanded-size limit; do not inflate all entries for a CRC check first. */
 function readBounded(
@@ -76,39 +104,103 @@ function readBounded(
   });
 }
 export async function decodeProject(data: ArrayBuffer): Promise<Design> {
-  if (data.byteLength > MAX_ARCHIVE) throw Error("Project file exceeds 5 MB.");
+  if (data.byteLength > MAX_ARCHIVE) throw Error("Project file exceeds 25 MB.");
   const bytes = new Uint8Array(data);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
     if (bytes.byteLength > MAX_DOCUMENT)
       throw Error("Legacy JSON project exceeds 2 MB.");
-    return validateDesign(JSON.parse(decoder.decode(bytes)));
+    const legacy = validateDesign(JSON.parse(decoder.decode(bytes)));
+    await verifyMeshAssets(legacy.meshAssets);
+    return legacy;
   }
   const zip = await JSZip.loadAsync(data);
   const entries = Object.values(zip.files);
   if (
-    entries.length !== 2 ||
+    entries.length < 2 ||
+    entries.length > 34 ||
     entries.some(
       (entry) =>
         entry.dir ||
-        !["manifest.json", "project.json"].includes(entry.name) ||
         ((entry as JSZip.JSZipObject & { unsafeOriginalName?: string })
           .unsafeOriginalName ?? entry.name) !== entry.name,
     )
   )
     throw Error("Unexpected or unsafe project archive path.");
   const manifest = JSON.parse(
-    decoder.decode(await readBounded(zip.file("manifest.json")!, 4096)),
+    decoder.decode(
+      await readBounded(
+        zip.file("manifest.json") ??
+          (() => {
+            throw Error("Missing manifest.");
+          })(),
+        16384,
+      ),
+    ),
   );
   if (
     manifest.format !== "forma3d" ||
-    manifest.version !== 1 ||
+    ![1, 2].includes(manifest.version) ||
     manifest.document !== "project.json" ||
     typeof manifest.sha256 !== "string" ||
     !/^[0-9a-f]{64}$/.test(manifest.sha256)
   )
     throw Error("Unsupported or invalid Forma3D container.");
+  const expected = new Set(["manifest.json", "project.json"]);
+  const meshes = manifest.version === 2 ? manifest.meshes : [];
+  if (
+    !Array.isArray(meshes) ||
+    meshes.length > 32 ||
+    (manifest.version === 2 && !meshes.length) ||
+    (manifest.version === 1 && data.byteLength > 5 * 1024 * 1024)
+  )
+    throw Error("Invalid or oversized native container.");
+  for (const mesh of meshes) {
+    if (
+      !mesh ||
+      typeof mesh.id !== "string" ||
+      !/^[a-f0-9]{64}$/.test(mesh.id) ||
+      mesh.path !== `meshes/${mesh.id}.stl` ||
+      mesh.sha256 !== mesh.id ||
+      expected.has(mesh.path)
+    )
+      throw Error("Invalid or duplicate mesh archive path.");
+    expected.add(mesh.path);
+  }
+  if (
+    entries.length !== expected.size ||
+    entries.some((e) => !expected.has(e.name))
+  )
+    throw Error("Unexpected or unsafe project archive path.");
   const project = await readBounded(zip.file("project.json")!, MAX_DOCUMENT);
   if ((await digest(project)) !== manifest.sha256)
     throw Error("Project integrity check failed.");
-  return validateDesign(JSON.parse(decoder.decode(project)));
+  const document = JSON.parse(decoder.decode(project));
+  if (manifest.version === 2) {
+    if (
+      document.version !== 5 ||
+      !Array.isArray(document.meshAssets) ||
+      document.meshAssets.length !== meshes.length
+    )
+      throw Error("Mesh manifest does not match project.");
+    let total = 0;
+    const byId = new Map<string, string>();
+    for (const mesh of meshes) {
+      const bytes = await readBounded(zip.file(mesh.path)!, MAX_MESH_BYTES);
+      total += bytes.byteLength;
+      if (total > MAX_PROJECT_MESH_BYTES)
+        throw Error("Project mesh data exceeds 20 MB.");
+      const raw = new Uint8Array(bytes).buffer;
+      if ((await meshDigest(raw)) !== mesh.sha256)
+        throw Error("Mesh integrity check failed.");
+      byId.set(mesh.id, toBase64(raw));
+    }
+    document.meshAssets = document.meshAssets.map((metadata: any) => {
+      if (!metadata || "data" in metadata || !byId.has(metadata.id))
+        throw Error("Mesh metadata does not match manifest.");
+      return { ...metadata, data: byId.get(metadata.id) };
+    });
+  }
+  const valid = validateDesign(document);
+  await verifyMeshAssets(valid.meshAssets);
+  return valid;
 }

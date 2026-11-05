@@ -11,6 +11,7 @@
     "@modelcontextprotocol/ext-apps": "^2.1.0",
     "@monaco-editor/loader": "^1.4.0",
     "@monaco-editor/react": "^4.6.0",
+    "@xmldom/xmldom": "0.9.12",
     "blurhash": "^2.0.5",
     "chroma-js": "^3.1.2",
     "debug": "^4.4.0",
@@ -84,5 +85,8 @@
     "webpack-cli": "^7.2.1",
     "webpack-dev-server": "^6.0.0",
     "workbox-webpack-plugin": "^7.3.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.17"
   }
 }

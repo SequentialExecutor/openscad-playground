@@ -1,5 +1,7 @@
 # OpenSCAD Playground
 
+For Forma3D Studio, start with the [complete clone-to-running guide](RUN_FORMA3D.md).
+
 [Open the Demo](https://ochafik.com/openscad2)
 
 <a href="https://ochafik.com/openscad2" target="_blank">
@@ -12,7 +14,7 @@ It defaults to the [Manifold backend](https://github.com/openscad/openscad/pull/
 
 Enjoy!
 
-Licenses: see [LICENSES](./LICENSE).
+Licenses: see [LICENSES](./LICENSE.md).
 
 ## Features
 
@@ -65,8 +67,8 @@ Prerequisites:
 Local dev:
 
 ```bash
+npm ci
 npm run build:libs  # Download WASM and build all OpenSCAD libraries
-npm install
 npm run start
 # http://localhost:4000/
 ```
@@ -74,8 +76,8 @@ npm run start
 Local prod (test both the different inlining and serving under a prefix):
 
 ```bash
+npm ci
 npm run build:libs  # Download WASM and build all OpenSCAD libraries
-npm install
 npm run start:production
 # http://localhost:3000/dist/
 ```
@@ -83,8 +85,8 @@ npm run start:production
 Deployment (edit "homepage" in `package.json` to match your deployment root!):
 
 ```bash
+npm ci
 npm run build:all  # Build libraries and compile the application
-npm install
 
 rm -fR ../ochafik.github.io/openscad2 && cp -R dist ../ochafik.github.io/openscad2 
 # Now commit and push changes, wait for site update and enjoy!
@@ -198,12 +200,16 @@ Send us a PR, then once it's merged request an update to the hosted https://ocha
 
 ## Forma3D Studio development
 
+Start with the comprehensive [clone-to-running guide](RUN_FORMA3D.md), covering
+prerequisites, development/production startup, mesh import, verification, MCP and
+troubleshooting.
+
 The visual CAD foundation is available through **Forma3D Studio · Visual Design**
 in the existing editor, or the `?studio=1` query parameter. It supports primitive
 solids, transform gizmos, editable boolean features, numeric editing, undo/redo,
 constrained sketch profiles and extrusion, mirrors/patterns/groups, bounded edge
 treatments and shells, revolution/offset, exact alignment/distribution, mechanical
-templates, native projects, local recovery, exact
+templates, STL/OBJ/compatible 3MF/GLB/glTF mesh import, native projects, local recovery, exact
 STL export and worker-based mesh analysis. The full planned feature set is not yet implemented. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the integration design,
 [FEATURES.md](FEATURES.md) for implemented versus planned functionality,
@@ -214,7 +220,7 @@ STL export and worker-based mesh analysis. The full planned feature set is not y
 Foundation regression checks (after `npm ci` in both root and `server/`):
 
 ```sh
-node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts tests/advanced-modeling.test.ts
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts tests/advanced-modeling.test.ts tests/mesh-import.test.ts
 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node tests/foundation-browser.mjs
 ```
 
@@ -233,7 +239,7 @@ npm start
 For automated visual workflows, with system Chromium installed:
 
 ```sh
-CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js tests/studio-advanced.test.js
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js tests/studio-advanced.test.js tests/studio-mesh-import.test.js tests/studio-recovery.test.js
 ```
 
 Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.
@@ -260,3 +266,5 @@ PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node scripts/capture-studio-docs.mjs
 ![Parametric enclosure with mounting posts and holes](docs/images/mechanical-enclosure.png)
 
 ![Editable circular pattern with result transforms](docs/images/advanced-pattern.png)
+
+![Imported mesh diagnostics with an editable boolean](docs/images/imported-mesh.png)

@@ -69,7 +69,7 @@ export function useFeatureMeshes(design: Design, selected?: string) {
         try {
           let data = cache.current.get(source);
           if (!data) {
-            job = evaluateExact(source, "display");
+            job = evaluateExact(source, "display", design.meshAssets);
             data = (await job.promise).data;
             if (!active) return;
             cache.current.set(source, data);

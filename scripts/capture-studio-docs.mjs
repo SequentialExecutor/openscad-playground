@@ -188,7 +188,55 @@ try {
   await page.screenshot({
     path: path.join(root, "docs/images/advanced-pattern.png"),
   });
-  console.log("Captured six real application screenshots in docs/images");
+  await page
+    .$('input[aria-label="Project file"]')
+    .then((input) =>
+      input.uploadFile(
+        path.join(root, "examples/forma3d/imported-mesh.forma3d"),
+      ),
+    );
+  await page.waitForSelector('button[aria-label="Select Imported cube"]');
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".studio-legend")].some((el) =>
+        el.textContent.includes("Exact geometry up to date"),
+      ),
+    { timeout: 60000 },
+  );
+  await page.click('button[aria-label="Select Imported cube"]');
+  await page.waitForSelector('section[aria-label="Imported mesh diagnostics"]');
+  await page.$eval(".studio-modeling", (el) => (el.open = false));
+  await page.$eval(".studio-mesh-import", (el) => (el.open = true));
+  await click("Fit all");
+  await frame();
+  await page.$eval(".studio-mesh-import", (el) =>
+    el.scrollIntoView({ block: "start" }),
+  );
+  await frame();
+  await page.screenshot({
+    path: path.join(root, "docs/images/imported-mesh.png"),
+  });
+  // Keep a real kernel export beside the native asset-backed example.
+  await page.evaluate(() => {
+    HTMLAnchorElement.prototype.click = function () {
+      fetch(this.href)
+        .then((r) => r.arrayBuffer())
+        .then(
+          (b) => (window.meshExampleDownload = Array.from(new Uint8Array(b))),
+        );
+    };
+  });
+  await click("Export exact STL");
+  await page.waitForFunction(() => window.meshExampleDownload?.length > 0, {
+    timeout: 60000,
+  });
+  fs.writeFileSync(
+    path.join(root, "examples/forma3d/imported-mesh.stl"),
+    Buffer.from(await page.evaluate(() => window.meshExampleDownload)),
+  );
+  console.log(
+    "Captured seven real application screenshots and the imported-mesh exact STL example",
+  );
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

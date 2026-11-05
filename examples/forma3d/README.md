@@ -37,3 +37,14 @@ floor/post heights in exact triangles, then saved and reloaded the project.
 `parametric-enclosure.stl` is that actual OpenSCAD/Manifold export. The template
 specification, transforms, IDs and printer settings remain editable in the native
 project; mesh import is not required.
+
+
+# Imported mesh with editable through-hole
+
+`source-cube.stl` is a known 10 × 10 × 10 mm source mesh. Import it with mm units
+and plate placement, or open `imported-mesh.forma3d`. The schema-5/native-v2 project
+contains the original normalized triangle asset, an imported body centered on the
+plate, a 4 mm cylindrical cutter and their editable Difference feature. The adjacent
+`imported-mesh.stl` is exported by the actual browser OpenSCAD/Manifold worker via
+the documentation capture script. The source mesh is retained as mesh geometry;
+this does not reconstruct a sketch or parametric cube from triangles.

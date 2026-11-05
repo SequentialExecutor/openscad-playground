@@ -32,7 +32,7 @@ Visual Design are separate documents; generated SCAD is read-only.
 
 Exported STL is in millimeters; many STL readers assume a unit because STL itself
 has no reliable unit metadata. Final geometry from multiple visible bodies is
-unioned by OpenSCAD. Mesh import remains deferred; mechanical templates are described below.
+unioned by OpenSCAD. Mesh import and mechanical templates are described below.
 Mesh inspection does not guarantee printability.
 
 
@@ -203,5 +203,71 @@ change its parameters; the adjacent STL is actual kernel output.
 
 ![Parametric enclosure with posts and holes](docs/images/mechanical-enclosure.png)
 
-Mesh import remains deferred. These tools operate on the document's native
-parametric geometry.
+Imported meshes support transforms, mirrors/patterns/groups and closed-mesh
+booleans. Profile operations and box edge treatments require the corresponding
+native parametric inputs.
+
+
+## Import mesh geometry
+
+Expand **Import mesh** and choose a local file. Select the source units, choose
+**Center X/Y and place on build plate** or **Preserve source coordinates**, check
+**I confirm these import units**, then **Import mesh**. Importing is one undo
+step. Cancel import stops the worker and keeps the current document; an import
+also rejects its result if the design changes while it is running.
+
+| Format | Supported subset | Unit handling |
+| --- | --- | --- |
+| Binary/ASCII STL | Triangle geometry; binary `solid` headers are detected by actual binary layout. | Explicit assumption required; STL has no reliable unit metadata. |
+| OBJ | Vertices, triangle faces and planar convex polygons, including negative indices. Objects/groups flatten into one mesh. | Explicit assumption required. |
+| 3MF | Core model, meshes, components and build transforms in one local model part; package relationships/content types are checked. | Format units from the model, or an explicit override. |
+| GLB/glTF | Static glTF 2.0 triangle geometry with embedded buffers, node transforms and instances; glTF Y-up becomes Forma3D Z-up. | Format units are meters, or an explicit override. |
+
+glTF imports the declared default scene, or its first scene when no default is
+declared. Other scenes remain outside this import.
+
+All stored geometry is normalized to millimeters and float32 triangle coordinates.
+Available unit assumptions are mm, cm, m, inches, feet and microns. Source
+coordinates remain in the asset; automatic plate placement changes the body's
+transform. Imported bodies use their source origin for transforms, which may
+lie away from their center. Use **Fit all** after large scale/position edits.
+
+The inspector shows source dimensions, surface area, volume when topology permits,
+triangle/shell counts and detected topology defects. These are **source**
+measurements before the body's transforms or dependent booleans. Use exact mesh
+analysis for final world geometry. Imported geometry does not become a complete
+editable CAD sketch/feature history; use numeric transforms and the normal gizmos.
+
+Closed, consistently oriented edge topology allows boolean, mirror, pattern and
+group features. Editing an imported operand's transform recomputes its dependents.
+Open/defective meshes remain displayable, transformable and savable with diagnostics,
+but are blocked from solid evaluation and solid features. No automatic repair,
+self-intersection certification or manifold-vertex guarantee is provided.
+
+Materials, textures, animation, skins, morph targets, compressed/required glTF
+extensions, external glTF buffers and external/required-extension 3MF components
+are unsupported. No referenced external resource is fetched. Triangulate concave,
+self-intersecting or nonplanar OBJ polygons in your source tool before importing.
+A rejected file leaves the current document intact.
+
+Imports are limited to 10 MB and 100,000 resulting triangles, including instances,
+with coordinates within ±1,000,000 mm. Worker import has a 30-second limit. A 3MF
+archive has at most 128 entries; each parsed XML part is stream-limited to 4 MB.
+Embedded glTF buffers are limited to 20 MB. Projects allow up to 32 distinct mesh
+assets totaling 20 MB of normalized binary STL. JSON metadata remains limited to
+2 MB; mesh-backed native archives are capped at 25 MB. Large files/assemblies may
+need simplification before importing.
+
+Mesh-backed projects use native container version 2 and document schema 5, with
+separate SHA-256-checked mesh files. Older valid projects migrate automatically.
+Undo/redo, duplication, locking, visibility and recovery preserve asset references.
+Unused mesh assets are removed when validating the document after body deletion.
+For a mesh-backed model, **Download SCAD** downloads `design.scad.zip`, containing
+the generated source and relative `meshes/` assets. Extract them together; the
+single SCAD text alone does not contain the mesh geometry.
+
+Open [`imported-mesh.forma3d`](examples/forma3d/imported-mesh.forma3d) for an imported
+10 mm cube with a 4 mm through-hole. Change the cylinder diameter or mesh transform;
+the preserved source asset and boolean remain independently editable.
+
+![Imported mesh source diagnostics and editable hole](docs/images/imported-mesh.png)

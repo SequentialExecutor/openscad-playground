@@ -1,3 +1,4 @@
+import { meshInfo } from "./mesh-asset";
 import React, { useEffect, useRef } from "react";
 import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -145,11 +146,17 @@ export default function Viewport(props: ViewportProps) {
     };
     renderer.domElement.addEventListener("pointerdown", down);
     renderer.domElement.addEventListener("pointerup", up);
-    const resize = new ResizeObserver(() => {
+    let resizeFrame = 0,
+      lastWidth = 0,
+      lastHeight = 0;
+    const applyResize = () => {
       const w = element.clientWidth,
         h = element.clientHeight;
-      if (!w || !h) return;
-      renderer.setSize(w, h);
+      if (!w || !h || (w === lastWidth && h === lastHeight)) return;
+      lastWidth = w;
+      lastHeight = h;
+      // CSS owns layout. Updating the drawing buffer must not resize its host.
+      renderer.setSize(w, h, false);
       if (camera instanceof T.PerspectiveCamera) camera.aspect = w / h;
       else {
         const half = (camera.top - camera.bottom) / 2;
@@ -157,6 +164,10 @@ export default function Viewport(props: ViewportProps) {
         camera.right = (half * w) / h;
       }
       camera.updateProjectionMatrix();
+    };
+    const resize = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(applyResize);
     });
     resize.observe(element);
     const clear = () => {
@@ -183,6 +194,7 @@ export default function Viewport(props: ViewportProps) {
         (b) =>
           b.kind !== "extrusion" &&
           b.kind !== "template" &&
+          b.kind !== "mesh" &&
           b.visible &&
           (roots.has(b.id) || b.id === latest.current.selected),
       )) {
@@ -206,6 +218,34 @@ export default function Viewport(props: ViewportProps) {
           g,
           new T.MeshStandardMaterial({
             color: b.id === latest.current.selected ? 0xffbe55 : 0x6ca7cc,
+            wireframe: !roots.has(b.id),
+            transparent: !roots.has(b.id),
+            opacity: roots.has(b.id) ? 1 : 0.5,
+            roughness: 0.55,
+            metalness: 0.12,
+          }),
+        );
+        m.userData.id = b.id;
+        setTransform(m, b);
+        solids.add(m);
+        if (b.id === latest.current.selected && !b.locked) gizmo.attach(m);
+      }
+      for (const b of latest.current.design.bodies.filter(
+        (b) =>
+          b.kind === "mesh" &&
+          b.visible &&
+          (roots.has(b.id) || b.id === latest.current.selected),
+      )) {
+        const a = latest.current.design.meshAssets.find(
+          (a) => a.id === b.meshAssetId,
+        )!;
+        const g = new STLLoader().parse(meshInfo(a).data);
+        g.computeVertexNormals();
+        const m = new T.Mesh(
+          g,
+          new T.MeshStandardMaterial({
+            color: b.id === latest.current.selected ? 0xffbe55 : 0x6ca7cc,
+            side: T.DoubleSide,
             wireframe: !roots.has(b.id),
             transparent: !roots.has(b.id),
             opacity: roots.has(b.id) ? 1 : 0.5,
@@ -294,6 +334,7 @@ export default function Viewport(props: ViewportProps) {
       dispose: () => {
         renderer.setAnimationLoop(null);
         resize.disconnect();
+        cancelAnimationFrame(resizeFrame);
         window.removeEventListener("keydown", cancel);
         renderer.domElement.removeEventListener("pointerdown", down);
         renderer.domElement.removeEventListener("pointerup", up);

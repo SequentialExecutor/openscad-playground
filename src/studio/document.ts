@@ -1,4 +1,13 @@
 import {
+  MeshAsset,
+  MeshUnit,
+  MeshFormat,
+  unitScale,
+  meshInfo,
+  validateMeshAsset,
+  MAX_PROJECT_MESH_BYTES,
+} from "./mesh-asset";
+import {
   ModelingFeature,
   validateModelingFeature,
   validateAdvancedDependencies,
@@ -28,7 +37,9 @@ export type Shape = "box" | "sphere" | "cylinder" | "cone";
 export interface Body {
   id: string;
   name: string;
-  kind: Shape | "extrusion" | "template";
+  kind: Shape | "extrusion" | "template" | "mesh";
+  meshAssetId?: string;
+  meshSource?: { format: MeshFormat; units: MeshUnit };
   template?: MechanicalSpec;
   extrusion?: Extrusion;
   size: Vec3;
@@ -49,7 +60,8 @@ export interface BooleanFeature {
 export type Feature = BooleanFeature | ModelingFeature;
 export type Transformable = Body | ModelingFeature;
 export interface Design {
-  version: 4;
+  version: 5;
+  meshAssets: MeshAsset[];
   name: string;
   units: "mm";
   bodies: Body[];
@@ -62,7 +74,8 @@ export interface History {
   future: Design[];
 }
 export const blankDesign = (): Design => ({
-  version: 4,
+  version: 5,
+  meshAssets: [],
   features: [],
   print: structuredClone(defaultPrintSettings),
   name: "Untitled design",
@@ -88,13 +101,15 @@ export function validateDesign(input: unknown): Design {
   const raw = input as { version?: unknown };
   const d = (
     raw.version === 1
-      ? { ...input, version: 4, features: [] }
-      : raw.version === 2 || raw.version === 3
-        ? { ...input, version: 4 }
+      ? { ...input, version: 5, features: [], meshAssets: [] }
+      : raw.version === 2 || raw.version === 3 || raw.version === 4
+        ? { ...input, version: 5, meshAssets: [] }
         : input
   ) as Design;
   if (
-    d.version !== 4 ||
+    d.version !== 5 ||
+    !Array.isArray(d.meshAssets) ||
+    d.meshAssets.length > 32 ||
     d.units !== "mm" ||
     typeof d.name !== "string" ||
     d.name.length > 200 ||
@@ -103,15 +118,29 @@ export function validateDesign(input: unknown): Design {
     d.bodies.length + d.features.length > 1000
   )
     throw Error("Unsupported or invalid project schema.");
+  const meshAssets = d.meshAssets.map(validateMeshAsset),
+    assets = new Map(meshAssets.map((a) => [a.id, a]));
+  if (
+    assets.size !== meshAssets.length ||
+    meshAssets.reduce((n, a) => n + meshInfo(a).data.byteLength, 0) >
+      MAX_PROJECT_MESH_BYTES
+  )
+    throw Error("Duplicate mesh assets or project mesh data exceeds 20 MB.");
   const print = d.print === undefined ? defaultPrintSettings : d.print;
   validatePrintSettings(print);
   const ids = new Set<string>();
   for (const b of d.bodies) {
     if (
       !b ||
-      !["box", "sphere", "cylinder", "cone", "extrusion", "template"].includes(
-        b.kind,
-      ) ||
+      ![
+        "box",
+        "sphere",
+        "cylinder",
+        "cone",
+        "extrusion",
+        "template",
+        "mesh",
+      ].includes(b.kind) ||
       typeof b.id !== "string" ||
       !b.id ||
       ids.has(b.id) ||
@@ -122,6 +151,18 @@ export function validateDesign(input: unknown): Design {
     )
       throw Error("Invalid or duplicate body.");
     ids.add(b.id);
+    if (
+      b.kind === "mesh" &&
+      b.meshSource &&
+      (!["stl", "obj", "3mf", "glb", "gltf"].includes(b.meshSource.format) ||
+        !Object.hasOwn(unitScale, b.meshSource.units))
+    )
+      throw Error("Invalid mesh source units/format.");
+    if (
+      b.kind === "mesh" &&
+      (typeof b.meshAssetId !== "string" || !assets.has(b.meshAssetId))
+    )
+      throw Error("Mesh body has a missing asset.");
     for (const key of ["size", "position", "rotation", "scale"] as const) {
       const v = b[key];
       if (
@@ -133,7 +174,10 @@ export function validateDesign(input: unknown): Design {
         )
       )
         throw Error(`Invalid ${key} on ${b.name}.`);
-      if ((key === "size" || key === "scale") && !v.every((n) => n >= 0.001))
+      if (
+        (key === "size" || key === "scale") &&
+        !v.every((n) => n >= (key === "size" && b.kind === "mesh" ? 0 : 0.001))
+      )
         throw Error(`${key} must be positive.`);
     }
   }
@@ -224,9 +268,24 @@ export function validateDesign(input: unknown): Design {
       if (!size.every((n) => n >= 0.001 && n <= 1e6))
         throw Error("Template bounds exceed modeling limits.");
     }
+  // Validate only mesh solids consumed by features. Open source meshes may remain
+  // visible and measurable, but cannot silently enter solid boolean workflows.
+  const usedMeshes = new Set(d.features.flatMap((f) => f.inputs));
+  for (const b of d.bodies)
+    if (
+      b.kind === "mesh" &&
+      usedMeshes.has(b.id) &&
+      !meshInfo(assets.get(b.meshAssetId!)!).report.closed
+    )
+      throw Error(
+        "Solid features require closed, consistently oriented mesh edge topology. Review imported mesh diagnostics.",
+      );
   // Strip unrecognized fields so imported data cannot alter runtime-only state.
   return {
-    version: 4,
+    version: 5,
+    meshAssets: meshAssets.filter((a) =>
+      d.bodies.some((b) => b.kind === "mesh" && b.meshAssetId === a.id),
+    ),
     print: {
       build: [...print.build],
       nozzle: print.nozzle,
@@ -252,11 +311,25 @@ export function validateDesign(input: unknown): Design {
       name: b.name,
       kind: b.kind,
       size:
-        b.kind === "extrusion"
-          ? extrusionSize(b.extrusion!)
-          : b.kind === "template"
-            ? templateSize(b.template!)
-            : [...b.size],
+        b.kind === "mesh"
+          ? ([
+              ...meshInfo(assets.get(b.meshAssetId!)!).report.bounds.size,
+            ] as Vec3)
+          : b.kind === "extrusion"
+            ? extrusionSize(b.extrusion!)
+            : b.kind === "template"
+              ? templateSize(b.template!)
+              : [...b.size],
+      ...(b.kind === "mesh"
+        ? {
+            meshAssetId: b.meshAssetId,
+            meshSource: {
+              format:
+                b.meshSource?.format ?? assets.get(b.meshAssetId!)!.format,
+              units: b.meshSource?.units ?? assets.get(b.meshAssetId!)!.units,
+            },
+          }
+        : {}),
       ...(b.kind === "template"
         ? { template: validateTemplate(b.template!) }
         : {}),
@@ -341,15 +414,17 @@ export function generateScad(design: Design, roots?: string[]): string {
         return `module ${name}() { ${node.operation}() { ${node.inputs.map((id) => `n${byId.get(id)!.index}();`).join(" ")} } }`;
       const b = node;
       const solid =
-        b.kind === "template"
-          ? templateScad(b.template!)
-          : b.kind === "extrusion"
-            ? extrusionScad(b.extrusion!)
-            : b.kind === "box"
-              ? `cube(${JSON.stringify(b.size)}, center=true);`
-              : b.kind === "sphere"
-                ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
-                : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
+        b.kind === "mesh"
+          ? `import("meshes/${b.meshAssetId}.stl",convexity=10);`
+          : b.kind === "template"
+            ? templateScad(b.template!)
+            : b.kind === "extrusion"
+              ? extrusionScad(b.extrusion!)
+              : b.kind === "box"
+                ? `cube(${JSON.stringify(b.size)}, center=true);`
+                : b.kind === "sphere"
+                  ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
+                  : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
       return `module ${name}() { translate(${JSON.stringify(b.position)}) rotate(${JSON.stringify(b.rotation)}) scale(${JSON.stringify(b.scale)}) ${solid} }`;
     });
   return (
@@ -386,4 +461,29 @@ export function createTemplateBody(template: MechanicalSpec): Body {
 }
 export function isTransformable(node: Body | Feature): node is Transformable {
   return "position" in node;
+}
+
+export function createMeshBody(
+  asset: MeshAsset,
+  name: string,
+  placement: "preserve" | "plate",
+): Body {
+  const info = meshInfo(asset),
+    { min, max, size } = info.report.bounds;
+  return {
+    ...createBody("box"),
+    kind: "mesh",
+    name: name.slice(0, 200),
+    meshAssetId: asset.id,
+    meshSource: { format: asset.format, units: asset.units },
+    size: [...size] as Vec3,
+    position:
+      placement === "plate"
+        ? [
+            -(min[0] + max[0]) / 2 || 0,
+            -(min[1] + max[1]) / 2 || 0,
+            -min[2] || 0,
+          ]
+        : [0, 0, 0],
+  };
 }

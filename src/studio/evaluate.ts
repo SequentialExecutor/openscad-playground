@@ -1,5 +1,10 @@
+import { MeshAsset, meshInfo, meshSources } from "./mesh-asset";
 /** Separate display/export scheduling slots; cancellation always settles the caller. */
-export function evaluateExact(source: string, channel: "display" | "export") {
+export function evaluateExact(
+  source: string,
+  channel: "display" | "export",
+  assets: MeshAsset[] = [],
+) {
   const cancellation =
     channel === "export" ? "Export canceled." : "Evaluation canceled.";
   let canceled = false;
@@ -10,12 +15,21 @@ export function evaluateExact(source: string, channel: "display" | "export") {
     rejectCancel = reject;
   });
   const work = (async () => {
+    const sources = meshSources(source, assets);
+    for (const a of assets)
+      if (
+        sources.some((s) => s.path === `/meshes/${a.id}.stl`) &&
+        !meshInfo(a).report.closed
+      )
+        throw Error(
+          "Exact solid evaluation requires closed imported mesh edge topology. Review import diagnostics; no automatic repair is applied.",
+        );
     const actions = await import("../runner/actions");
     if (canceled) throw Error(cancellation);
     const run = channel === "display" ? actions.render : actions.renderIsolated;
     const task = run({
       scadPath: "/forma.scad",
-      sources: [{ path: "/forma.scad", content: source }],
+      sources: [{ path: "/forma.scad", content: source }, ...sources],
       isPreview: false,
       mountArchives: false,
       renderFormat: "stl",

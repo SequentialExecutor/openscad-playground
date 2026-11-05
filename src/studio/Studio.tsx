@@ -1,3 +1,6 @@
+import { MeshImportTools, MeshInspector, MeshPlacement } from "./MeshTools";
+import { MeshUnit, MeshAsset, MAX_IMPORT_BYTES } from "./mesh-asset";
+import { encodeScadBundle } from "./scad-bundle";
 import { ModelingTools, ModelingInspector } from "./ModelingTools";
 import { MechanicalTools, MechanicalInspector } from "./MechanicalTools";
 import { createModelingFeature, modelingNames } from "./advanced";
@@ -13,6 +16,7 @@ import {
   Feature,
   Transformable,
   createTemplateBody,
+  createMeshBody,
   createBoolean,
   rootNodes,
   blankDesign,
@@ -59,6 +63,7 @@ export default function Studio() {
   }>();
   const [analyzing, setAnalyzing] = useState(false);
   const [positioning, setPositioning] = useState(false);
+  const [importing, setImporting] = useState(false);
   const design = history.present;
   const printSettings = design.print;
 
@@ -244,6 +249,87 @@ export default function Studio() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
+  const importMesh = async (
+    file: File,
+    units: MeshUnit | "file",
+    placement: MeshPlacement,
+  ): Promise<boolean> => {
+    if (busy) return false;
+    if (!file.size || file.size > MAX_IMPORT_BYTES) {
+      setStatus("Mesh import failed: choose a file between 1 byte and 10 MB.");
+      return false;
+    }
+    const snapshot = current.current,
+      token = revision.current;
+    let canceled = false,
+      cancelWorker: (() => void) | undefined;
+    setBusy(true);
+    setImporting(true);
+    setStatus("Reading and inspecting mesh geometry…");
+    job.current = {
+      kill: () => {
+        canceled = true;
+        cancelWorker?.();
+      },
+    };
+    try {
+      const data = await file.arrayBuffer();
+      if (canceled) throw Error("Mesh import canceled.");
+      const asset = await new Promise<MeshAsset>((resolve, reject) => {
+        const worker = new Worker(
+          new URL("./mesh-import-worker.ts", import.meta.url),
+        );
+        const cleanup = () => {
+          clearTimeout(timer);
+          worker.terminate();
+        };
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(Error("Mesh import exceeded 30 seconds."));
+        }, 30000);
+        cancelWorker = () => {
+          cleanup();
+          reject(Error("Mesh import canceled."));
+        };
+        worker.onmessage = (e) => {
+          cleanup();
+          if (e.data.error) reject(Error(e.data.error));
+          else resolve(e.data.asset);
+        };
+        worker.onerror = (e) => {
+          cleanup();
+          reject(Error(e.message));
+        };
+        worker.postMessage({ data, name: file.name, units }, [data]);
+      });
+      if (canceled || token !== revision.current)
+        throw Error("Mesh import canceled or design changed; import again.");
+      const b = createMeshBody(
+        asset,
+        file.name.replace(/[\x00-\x1f]/g, ""),
+        placement,
+      );
+      const next = validateDesign({
+        ...snapshot,
+        meshAssets: snapshot.meshAssets.some((a) => a.id === asset.id)
+          ? snapshot.meshAssets
+          : [...snapshot.meshAssets, asset],
+        bodies: [...snapshot.bodies, b],
+      });
+      commit(next);
+      setSelected(b.id);
+      setFit((n) => n + 1);
+      setStatus("Mesh imported. Review source units and topology diagnostics.");
+      return true;
+    } catch (e) {
+      setStatus(`Mesh import failed: ${e}`);
+      return false;
+    } finally {
+      job.current = undefined;
+      setBusy(false);
+      setImporting(false);
+    }
+  };
   const positionObjects = async (action: PositionAction) => {
     if (busy) return;
     const snapshot = current.current,
@@ -284,7 +370,11 @@ export default function Studio() {
       const measurements = [];
       for (const id of ids) {
         if (canceled) throw Error("Positioning canceled.");
-        const task = evaluateExact(generateScad(snapshot, [id]), "export");
+        const task = evaluateExact(
+          generateScad(snapshot, [id]),
+          "export",
+          snapshot.meshAssets,
+        );
         activeCancel = task.cancel;
         const result = await task.promise;
         if (canceled) throw Error("Positioning canceled.");
@@ -363,7 +453,11 @@ export default function Studio() {
     setAnalyzing(analyze);
     setPositioning(false);
     setStatus("Evaluating exact geometry in OpenSCAD / Manifold…");
-    const task = evaluateExact(generateScad(snapshot), "export");
+    const task = evaluateExact(
+      generateScad(snapshot),
+      "export",
+      snapshot.meshAssets,
+    );
     job.current = { kill: () => task.cancel() };
     try {
       const output = await task.promise;
@@ -496,6 +590,7 @@ export default function Studio() {
         </button>
         <input
           ref={fileInput}
+          aria-label="Project file"
           hidden
           type="file"
           accept=".forma3d,.json"
@@ -538,11 +633,13 @@ export default function Studio() {
               setStatus("Canceling current operation…");
             }}
           >
-            {positioning
-              ? "Cancel positioning"
-              : analyzing
-                ? "Cancel analysis"
-                : "Cancel export"}
+            {importing
+              ? "Cancel import"
+              : positioning
+                ? "Cancel positioning"
+                : analyzing
+                  ? "Cancel analysis"
+                  : "Cancel export"}
           </button>
         )}
         <button
@@ -606,6 +703,7 @@ export default function Studio() {
               }
             }}
           />
+          <MeshImportTools busy={busy} ready={ready} onImport={importMesh} />
           <MechanicalTools
             onAdd={(spec) => {
               const b = createTemplateBody(spec);
@@ -754,12 +852,17 @@ export default function Studio() {
             <section className="studio-source">
               <h2>Generated source · read only</h2>
               <button
-                onClick={() =>
-                  download(
-                    new Blob([source], { type: "text/plain" }),
-                    "design.scad",
-                  )
-                }
+                onClick={async () => {
+                  try {
+                    const bundle = await encodeScadBundle(design);
+                    download(
+                      new Blob([bundle.data], { type: bundle.type }),
+                      bundle.name,
+                    );
+                  } catch (e) {
+                    setStatus(`SCAD download failed: ${e}`);
+                  }
+                }}
               >
                 Download SCAD
               </button>
@@ -808,9 +911,19 @@ export default function Studio() {
                   ? "sketch origin"
                   : body.kind === "template"
                     ? "template origin (base Z=0)"
-                    : "centered origin"}
+                    : body.kind === "mesh"
+                      ? "source mesh origin"
+                      : "centered origin"}
                 {body.locked ? " • locked" : ""}
               </p>
+              {body.kind === "mesh" && (
+                <MeshInspector
+                  body={body}
+                  asset={
+                    design.meshAssets.find((a) => a.id === body.meshAssetId)!
+                  }
+                />
+              )}
               {body.kind === "template" && body.template && (
                 <fieldset disabled={body.locked || !!draft}>
                   <MechanicalInspector
@@ -850,39 +963,41 @@ export default function Studio() {
                   </p>
                 </fieldset>
               )}
-              {body.kind !== "template" && body.kind !== "extrusion" && (
-                <fieldset disabled={body.locked || !!draft}>
-                  <legend>Dimensions (mm)</legend>
-                  <p className="studio-muted">
-                    Unscaled local bounding dimensions
-                  </p>
-                  {(body.kind === "cylinder" || body.kind === "cone") && (
-                    <Numeric
-                      label="Diameter (mm)"
-                      value={body.size[0]}
-                      positive
-                      onCommit={(v) =>
-                        changeBody({ ...body, size: [v, v, body.size[2]] })
-                      }
-                    />
-                  )}
-                  <div className="studio-values">
-                    {body.size.map((n, i) => (
+              {body.kind !== "template" &&
+                body.kind !== "extrusion" &&
+                body.kind !== "mesh" && (
+                  <fieldset disabled={body.locked || !!draft}>
+                    <legend>Dimensions (mm)</legend>
+                    <p className="studio-muted">
+                      Unscaled local bounding dimensions
+                    </p>
+                    {(body.kind === "cylinder" || body.kind === "cone") && (
                       <Numeric
-                        key={i}
-                        label={`${["Width", "Depth", "Height"][i]} (mm)`}
-                        value={n}
+                        label="Diameter (mm)"
+                        value={body.size[0]}
                         positive
-                        onCommit={(v) => {
-                          const size = [...body.size] as Vec3;
-                          size[i] = v;
-                          changeBody({ ...body, size });
-                        }}
+                        onCommit={(v) =>
+                          changeBody({ ...body, size: [v, v, body.size[2]] })
+                        }
                       />
-                    ))}
-                  </div>
-                </fieldset>
-              )}
+                    )}
+                    <div className="studio-values">
+                      {body.size.map((n, i) => (
+                        <Numeric
+                          key={i}
+                          label={`${["Width", "Depth", "Height"][i]} (mm)`}
+                          value={n}
+                          positive
+                          onCommit={(v) => {
+                            const size = [...body.size] as Vec3;
+                            size[i] = v;
+                            changeBody({ ...body, size });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
               {(["position", "rotation", "scale"] as const).map((key) => (
                 <fieldset key={key} disabled={body.locked || !!draft}>
                   <legend>

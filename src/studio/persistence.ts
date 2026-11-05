@@ -1,3 +1,4 @@
+import { verifyMeshAssets } from "./mesh-asset";
 import { Design, validateDesign } from "./document";
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -19,7 +20,10 @@ export async function loadRecovery(): Promise<Design | undefined> {
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
     });
-    return data === undefined ? undefined : validateDesign(data);
+    if (data === undefined) return undefined;
+    const design = validateDesign(data);
+    await verifyMeshAssets(design.meshAssets);
+    return design;
   } finally {
     db.close();
   }

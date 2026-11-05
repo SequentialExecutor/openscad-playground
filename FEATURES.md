@@ -41,7 +41,7 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 - Principal-plane XY/XZ/YZ linear extrusion and dependent boolean recomputation.
   Only closed, nondegenerate, non-self-intersecting profiles may be applied.
 - Applied sketch constraints, extrusion parameters and IDs persist in native
-  projects and autosave. Older schema-1/2/3 documents migrate to schema 4.
+  projects and autosave. Older schema-1/2/3/4 documents migrate to schema 5.
 - Non-destructive mirror, linear/circular patterns and groups, with preserved
   inputs, independent result transforms/gizmos and lock controls.
 - Sketch profile offset with round/miter/chamfer joins and rotational extrusion.
@@ -52,6 +52,12 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 - Parametric enclosures with optional four mounting posts/through-holes, spacers,
   standoffs, clearance/counterbore/countersink cutting solids, mounting tabs,
   tapered alignment pins and a snap-fit reference beam. No material/fit guarantee.
+- STL/OBJ and compatible core 3MF/static embedded glTF/GLB geometry import,
+  explicit unit confirmation, source placement, bounds/area/topology diagnostics,
+  transforms/gizmos and closed-mesh feature/boolean participation.
+- Hash-checked native mesh assets, schema-5 recovery/history, native container v2
+  and portable SCAD-plus-mesh ZIP downloads. Open meshes remain visible/savable;
+  unsupported solid operations report explicit errors without guessing a repair.
 - Earlier customizer zero/empty-value and 3MF build-UUID fixes retained.
 
 ## Not implemented yet
@@ -59,12 +65,13 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 Arcs, arbitrary-face sketches, multiple contours and general nonlinear constraints;
 arbitrary-edge fillets/chamfers and general solid shelling; viewport multi-selection;
 standalone/open-sketch persistence; additional primitives/text and clipboard commands;
-mesh import and repair (deferred); imported project assets and recent projects;
+general mesh repair/reconstruction, texture/material import and recent projects;
 persistent camera/workspace arrangement; interactive point/angle measurement and
 arbitrary wall-thickness analysis.
 Only four camera presets and world-space move/rotate are currently exposed.
 The original Code workspace retains its broader export and library capabilities;
-visual geometry export currently exposes SCAD and STL only, plus native projects.
+visual geometry export currently exposes SCAD (bundled with assets for mesh-backed
+models) and STL, plus native projects.
 
 Unconsumed visible roots are unioned for final export. Boolean operands remain
 editable and may be shared by nested features. Hidden roots are omitted; hidden

@@ -30,3 +30,13 @@ Forma3D. No analytics or external geometry service was added. Exact STL evaluati
 runs in the local browser worker.
 
 `esbuild@0.28.2` is an explicit MIT-licensed development dependency for the existing MCP browser test bundler. It is not included in the browser runtime.
+
+
+## Mesh import additions
+
+`@xmldom/xmldom@0.9.12` is an MIT-licensed runtime XML parser used in the local
+3MF importer worker. Preserve its installed LICENSE and copyright notices when
+distributing bundles. Existing Three.js math and JSZip handle scene transforms
+and bounded archives. No external geometry conversion service is added. The
+DOMPurify override updates an existing Monaco transitive dependency to 3.4.17;
+its upstream license/notice requirements continue to apply.
