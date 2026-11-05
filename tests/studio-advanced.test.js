@@ -351,6 +351,58 @@ describe("Advanced parametric modeling", () => {
       1,
     );
   }, 120000);
+  test("rounded enclosure rejects protruding posts and accepts an inset that keeps all four inside", async () => {
+    await template("enclosure");
+    await numeric("Enclosure corner radius (mm)", 29);
+    await numeric("Mounting inset (mm)", 7);
+    await page.click('input[aria-label="Enclosure mounting posts"]');
+    await page.waitForFunction(() =>
+      document.querySelector("footer").textContent.includes("rounded corners"),
+    );
+    expect(
+      await page.$eval(
+        'input[aria-label="Enclosure mounting posts"]',
+        (el) => el.checked,
+      ),
+    ).toBe(false);
+    await numeric("Mounting inset (mm)", 14);
+    await page.click('input[aria-label="Enclosure mounting posts"]');
+    await page.click('input[aria-label="Enclosure post holes"]');
+    await ready();
+    const p = await project();
+    expect(p.bodies[0].template.posts).toBe(true);
+    expect(p.bodies[0].template.inset).toBe(14);
+    const r = mesh(await download("Export exact STL"));
+    expect(r.size).toEqual([100, 60, 30]);
+    expect(r.levels(36.137, 16.219)).toHaveLength(0);
+    expect(r.levels(39, 16.137).at(-1)).toBeCloseTo(9, 4);
+  }, 90000);
+  test("thin-part countersink ignores unused counterbore depth and cuts the measured cone", async () => {
+    await click("＋ box");
+    await numeric("Width (mm)", 20);
+    await numeric("Depth (mm)", 20);
+    await numeric("Height (mm)", 1);
+    await numeric("position Z", 0.5);
+    await template("hole");
+    await numeric("Head recess diameter (mm)", 4);
+    await page.select('select[aria-label="Hole cutter style"]', "countersink");
+    await numeric("Hole cutter depth (mm)", 1);
+    expect(
+      (await project()).bodies.find((b) => b.kind === "template").template
+        .headDepth,
+    ).toBe(3);
+    await click("Difference");
+    await ready();
+    const r = mesh(await download("Export exact STL")),
+      h = 0.4;
+    expect(r.size).toEqual([20, 20, 1]);
+    expect(r.volume).toBeCloseTo(
+      400 - factor * (1.6 ** 2 * (1 - h) + (h * (1.6 ** 2 + 1.6 * 2 + 4)) / 3),
+      2,
+    );
+    expect(r.levels(1.8, 0.137).at(-1)).toBeGreaterThan(0.6);
+    expect(r.levels(1.8, 0.137).at(-1)).toBeLessThan(1);
+  }, 90000);
   test("counterbore and countersink cutters actually cut the specified recess", async () => {
     await click("＋ box");
     await numeric("Width (mm)", 40);

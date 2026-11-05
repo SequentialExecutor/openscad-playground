@@ -199,3 +199,47 @@ test("distribution uses real bounds; old boolean targets receive a reversible tr
   assert.equal(moved.features[1].operation, "group");
   assert.deepEqual(d.features, [f]);
 });
+
+test("enclosure posts fit the rounded cavity, including the actual faceted corner boundary", () => {
+  const e = defaultTemplate("enclosure");
+  if (e.kind !== "enclosure") throw Error("Expected enclosure");
+  assert.throws(
+    () => validateTemplate({ ...e, corner: 29, inset: 7, posts: true }),
+    /rounded corners/,
+  );
+  assert.ok(validateTemplate({ ...e, corner: 29, inset: 7, posts: false }));
+  assert.ok(
+    validateTemplate({ ...e, corner: 29, inset: 14, posts: true, holes: true }),
+  );
+  // This disk fits an ideal circle but clips the 64-segment cavity boundary.
+  const idealInset = 29 - (26 - 4) / Math.SQRT2;
+  assert.throws(
+    () =>
+      validateTemplate({ ...e, corner: 29, inset: idealInset, posts: true }),
+    /rounded corners/,
+  );
+  // A disk tangent to a straight cavity side remains valid.
+  assert.ok(validateTemplate({ ...e, corner: 0, inset: 7, posts: true }));
+});
+test("countersinks validate their conical depth independently of unused counterbore depth", () => {
+  const h = defaultTemplate("hole");
+  if (h.kind !== "hole") throw Error("Expected hole");
+  const thin = {
+    ...h,
+    style: "countersink" as const,
+    depth: 1,
+    headDiameter: 4,
+    headDepth: 3,
+  };
+  assert.ok(validateTemplate(thin));
+  assert.ok(validateTemplate({ ...thin, headDepth: 1000 }));
+  assert.throws(
+    () => validateTemplate({ ...thin, style: "counterbore" }),
+    /depth/,
+  );
+  assert.throws(
+    () => validateTemplate({ ...thin, headDiameter: 6.5 }),
+    /depth/,
+  );
+  assert.throws(() => validateTemplate({ ...thin, angle: 10 }), /depth/);
+});

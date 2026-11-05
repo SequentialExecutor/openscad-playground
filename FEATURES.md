@@ -20,7 +20,8 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
   cancellation, a 60-second timeout and basic binary/triangle validation.
 - Native `.forma3d` ZIP project save/open with a SHA-256 integrity manifest,
   bounded decompression and safe path validation; older JSON projects migrate.
-- IndexedDB autosave/recovery and unsaved-navigation warnings.
+- IndexedDB autosave/recovery and unsaved-navigation warnings. Failed recovery
+  reads or schema validation pause autosave while preserving the stored record.
 - Editable union, difference and intersection features with preserved operands,
   validated DAG references, nested feature support and debounced exact display.
 - A circular cylinder/cone diameter control updates width/depth as one undo step.

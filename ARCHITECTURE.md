@@ -234,3 +234,19 @@ deferred and no imported assets have been added to native container version 1.
 
 The illustrated guide includes actual production captures of the enclosure and
 circular pattern. Examples include a native editable enclosure and its exact STL.
+
+
+## Recovery and template validation corrections
+
+Startup readiness and permission to autosave are separate states. A successful
+recovery read (including an absent record) enables autosave. A failed read or
+schema validation leaves the persisted recovery record untouched for the entire
+session, while editing and native downloads remain available. The save-status
+message explains the pause, and new unsaved edits retain navigation protection.
+A subsequent successful startup restores normal recovery and autosave.
+
+Enclosure mounting disks are checked against the cavity's straight sides and
+64-segment rounded corner edges at all four symmetric mounting locations.
+Countersink fit checks use shaft/head diameters and angle to derive conical depth;
+only counterbores apply the stored counterbore-depth limit. No schema change or
+automatic movement of existing mounting parameters is introduced.

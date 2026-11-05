@@ -32,9 +32,16 @@ Visual Design are separate documents; generated SCAD is read-only.
 
 Exported STL is in millimeters; many STL readers assume a unit because STL itself
 has no reliable unit metadata. Final geometry from multiple visible bodies is
-unioned by OpenSCAD. Mesh imports and manufacturing templates are still pending.
+unioned by OpenSCAD. Mesh import remains deferred; mechanical templates are described below.
 Mesh inspection does not guarantee printability.
 
+
+If recovery cannot be read or its saved schema is invalid, **local autosave stays
+paused for that session**. The stored recovery document is preserved. You can
+continue editing and use **Save project** to download your current work; download
+it before reloading to retry recovery. Autosave resumes on a subsequent startup
+only when the recovery read succeeds. Watch the persistent local-save status,
+including after New/Open; those commands do not override a failed recovery read.
 
 ## Editable boolean modeling
 
@@ -175,12 +182,13 @@ parameters. Templates start at Z=0 and support normal transforms and booleans.
 - **Enclosure:** open-top box, wall/floor thickness, rounded vertical corners,
   optional four mounting posts and optional through-holes in posts and floor.
   Mounting inset is measured from the outer edges; posts and holes follow width
-  and depth edits. Invalid wall/post fits are rejected.
+  and depth edits. Invalid wall/post fits are rejected, including clearance against rounded cavity corners.
 - **Spacer / Standoff:** outer/bore diameters and height; standoff adds a flange.
   A zero bore creates a solid post.
 - **Hole cutter:** clearance, counterbore or countersink solid. Nominal diameter
   plus allowance gives the shaft diameter. Head diameter and recess depth or
-  countersink angle set the opening. Position it through your part and subtract
+  countersink angle set the opening. Countersinks use their calculated conical
+  depth; the counterbore-depth field does not limit them. Position it through your part and subtract
   it with **Difference**; adding the cutter alone does not create a hole.
 - **Mounting tab:** rounded rectangular tab with a dimensioned offset hole.
 - **Alignment pin:** shaft with a tapered tip, with configurable dimensions.

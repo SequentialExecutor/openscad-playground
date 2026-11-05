@@ -128,6 +128,23 @@ export function defaultTemplate(kind: TemplateKind): MechanicalSpec {
       };
   }
 }
+// Rounded template profiles use 64 segments. Check the mounting disk against
+// the cavity's straight sides and each first-quadrant corner segment; symmetry
+// gives the same clearance at all four mounting positions.
+function mountingPostsFit(
+  t: Extract<MechanicalSpec, { kind: "enclosure" }>,
+): boolean {
+  const radius = Math.max(0, t.corner - t.wall),
+    postRadius = t.postDiameter / 2;
+  if (t.inset - t.wall < postRadius) return false;
+  return Array.from({ length: 16 }, (_, i) => {
+    const angle = ((i + 0.5) * Math.PI) / 32;
+    const clearance =
+      radius * Math.cos(Math.PI / 64) +
+      (t.inset - t.wall - radius) * (Math.cos(angle) + Math.sin(angle));
+    return clearance + 1e-9 >= postRadius;
+  }).every(Boolean);
+}
 export function validateTemplate(t: MechanicalSpec): MechanicalSpec {
   if (!t || !Object.hasOwn(templateNames, t.kind))
     throw Error("Unknown mechanical template.");
@@ -160,13 +177,13 @@ export function validateTemplate(t: MechanicalSpec): MechanicalSpec {
         t.wall >= t.height ||
         t.corner >= Math.min(t.width, t.depth) / 2 ||
         (t.posts &&
-          (t.inset < t.wall + t.postDiameter / 2 ||
+          (!mountingPostsFit(t) ||
             2 * t.inset + t.postDiameter >= Math.min(t.width, t.depth) ||
             t.postHeight + t.wall > t.height ||
             t.holeDiameter >= t.postDiameter))
       )
         throw Error(
-          "Invalid enclosure wall, corner, mounting inset or post dimensions. Enable posts before holes.",
+          "Invalid enclosure dimensions: mounting posts must fit inside the cavity, including rounded corners. Enable posts before holes.",
         );
       return {
         kind: t.kind,
@@ -215,7 +232,7 @@ export function validateTemplate(t: MechanicalSpec): MechanicalSpec {
       if (
         t.style !== "clearance" &&
         (t.headDiameter <= t.diameter + t.clearance ||
-          t.headDepth > t.depth ||
+          (t.style === "counterbore" && t.headDepth > t.depth) ||
           (t.style === "countersink" &&
             (t.headDiameter - t.diameter - t.clearance) /
               2 /

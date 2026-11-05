@@ -316,3 +316,45 @@ regression passed against the final build. The full development record above
 and the final production record have different scopes and are not combined into
 a single test count. All six screenshots were refreshed against the final build;
 `git diff --cached --check` passed.
+
+## Recovery preservation and template-fit repairs
+
+The recovery regression uses isolated Chromium contexts and real IndexedDB. One
+case injects a transient recovery read error; another stores an invalid-schema
+record. Each verifies the existing record remains unchanged after
+startup and after subsequent edits, waiting beyond the autosave debounce. Native
+project download remains available, unsaved navigation raises a warning, a fresh
+successful startup restores the original body ID, and later edits autosave again.
+An empty recovery slot remains a successful read and supports normal autosave.
+
+Two additional template unit cases bring the executed unit suite to 33 passing
+tests. Rounded-enclosure checks reject protruding mounting posts and a fit
+that would pass an ideal-circle test but clips the actual faceted cavity corner;
+a valid inset and straight-side tangency remain accepted. Countersink checks
+accept a 1 mm depth with a 0.4 mm conical recess despite a stored 3 mm counterbore
+depth, while rejecting oversized cones and genuinely oversized counterbores.
+
+Browser geometry regressions check rejected enclosure edits preserve the previous
+parameters, accept relocated posts/holes inside a 29 mm rounded corner, and
+export a closed 100 × 60 × 30 mm mesh with measured post heights/hole positions.
+The thin-part countersink test subtracts a 3.2 mm shaft/4 mm head, 90° cutter
+from a 20 × 20 × 1 mm plate and checks exact STL bounds, paired/oriented edges,
+conical surface height and analytic volume.
+
+The targeted development command is:
+
+```sh
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+npm run test:e2e -- --runInBand tests/studio-recovery.test.js tests/studio-advanced.test.js
+```
+
+The production command from the preceding section additionally includes
+`tests/studio-recovery.test.js` and `Recovery failure protection` in the name
+filter. Root/server lockfiles and geometry schema remain unchanged.
+
+Final repair validation: all 33 unit tests pass; all 16 targeted development
+browser cases pass; all 34 selected production checks pass across seven suites
+(27 visual/recovery workflows, four Code checks and three bundle checks).
+Forty-five other production tests were excluded by the explicit name filter,
+not executed and passed. Production build, strict type check and staged diff
+whitespace validation pass. Existing webpack bundle/WASM size warnings remain.

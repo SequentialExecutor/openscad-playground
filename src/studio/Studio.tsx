@@ -63,6 +63,7 @@ export default function Studio() {
   const printSettings = design.print;
 
   const nodes = [...design.bodies, ...design.features];
+  const initialDesign = useRef(design);
   const current = useRef(design);
   current.current = design;
   const [selected, setSelected] = useState<string>();
@@ -95,6 +96,7 @@ export default function Studio() {
   const [status, setStatus] = useState("Loading local recovery…");
   const [saveStatus, setSaveStatus] = useState("");
   const [ready, setReady] = useState(false);
+  const [recoveryLoaded, setRecoveryLoaded] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -105,6 +107,7 @@ export default function Studio() {
     loadRecovery()
       .then((d) => {
         if (active) {
+          setRecoveryLoaded(true);
           if (d) setHistory({ past: [], present: d, future: [] });
           setStatus(d ? "Recovered local design" : "Ready • millimeters");
         }
@@ -119,6 +122,16 @@ export default function Studio() {
   useEffect(() => {
     revision.current++;
     if (!ready) return;
+    // A failed read must never authorize replacing an unknown recovery document.
+    // Editing and project downloads remain available, but only a successful
+    // startup read (including a missing record) enables this session's autosave.
+    if (!recoveryLoaded) {
+      unsaved.current = design !== initialDesign.current;
+      setSaveStatus(
+        "Local autosave paused: recovery could not be read. Download your work before reloading to retry.",
+      );
+      return;
+    }
     unsaved.current = true;
     setSaveStatus("Saving locally…");
     const t = setTimeout(
@@ -136,7 +149,7 @@ export default function Studio() {
       500,
     );
     return () => clearTimeout(t);
-  }, [design, ready]);
+  }, [design, ready, recoveryLoaded]);
   const commit = (next: Design) => {
     try {
       const validated = validateDesign(next);
