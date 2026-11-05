@@ -1,6 +1,11 @@
 # OpenSCAD Playground
 
-For Forma3D Studio, start with the [complete clone-to-running guide](RUN_FORMA3D.md).
+**Forma3D Studio:** [User guide with screenshots](USER_GUIDE.md) ·
+[Make your first part](USER_GUIDE.md#make-your-first-part-a-plate-with-a-hole) ·
+[Install and run](RUN_FORMA3D.md)
+
+The user guide walks through a printable part, sketches, advanced modeling, mesh
+import, saving/exporting, and switching between visual design and Code.
 
 [Open the Demo](https://ochafik.com/openscad2)
 
@@ -199,6 +204,10 @@ To retire a library, delete its entry from `libs-config.json` and add its name t
 Send us a PR, then once it's merged request an update to the hosted https://ochafik.com/openscad2 demo.
 
 ## Forma3D Studio development
+
+For using the app, see the **[Forma3D Studio user guide](USER_GUIDE.md)**. It includes
+an illustrated first-part tutorial, tool reference, example downloads, shortcuts
+and troubleshooting.
 
 Start with the comprehensive [clone-to-running guide](RUN_FORMA3D.md), covering
 prerequisites, development/production startup, mesh import, verification, MCP and

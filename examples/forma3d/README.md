@@ -1,3 +1,12 @@
+# First-part tutorial
+
+Open [first-part.forma3d](first-part.forma3d) to explore the part built in the
+[user guide](../../USER_GUIDE.md#make-your-first-part-a-plate-with-a-hole): a
+60 × 40 × 6 mm plate resting at Z=0, with an 8 mm centered through-hole. Its box,
+cylindrical cutter and Difference remain editable. The documentation capture
+script creates this native project through the actual UI and verifies the
+exported STL bounds and hole volume.
+
 # Editable example: rotated block
 
 Open `rotated-block.forma3d.json` using the visual workspace's Open project.

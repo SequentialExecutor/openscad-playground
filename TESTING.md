@@ -515,3 +515,26 @@ seconds with the documented 15-second default timeout. This includes all seven
 linked-workspace workflows and the original Code, visual, mesh, recovery, sketch,
 boolean, advanced-modeling and bundle regressions. No source changes followed
 that passing run.
+
+## Illustrated user-guide walkthrough
+
+The user guide now provides a first-part tutorial and task-based tool reference,
+with a prominent README entry. Three new screenshots show the same 60 × 40 × 6 mm
+plate before subtraction, after its 8 mm through-hole, and in Code. The native
+`examples/forma3d/first-part.forma3d` download contains both editable operands and
+the Difference feature. The guide places ten real screenshots alongside the
+relevant instructions.
+
+```sh
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+  node scripts/capture-studio-docs.mjs --tutorial-only
+```
+
+The capture script executes the instructions through the real UI, checks the
+272-triangle exact STL bounds and hole volume, changes the generated width from
+60 to 70 in Code, returns to Visual Design, and verifies Undo restores 60. It
+waits for the Code viewer's fade-in before taking its screenshot. The native
+example was independently decoded with the project loader and checked for its
+schema, dimensions, positions and boolean references. All 39 local guide/example
+links, image paths and heading anchors were checked, including the prominent
+README guide link. No application source changed in this documentation update.
