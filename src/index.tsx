@@ -1,47 +1,50 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
-import './public-path.ts';
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { createEditorFS } from './fs/filesystem.ts';
-import { zipArchives } from './fs/zip-archives.ts';
-import { createInitialState } from './state/initial-state.ts';
-import './index.css';
+import "./public-path.ts";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { createEditorFS } from "./fs/filesystem.ts";
+import { zipArchives } from "./fs/zip-archives.ts";
+import { createInitialState } from "./state/initial-state.ts";
+import "./index.css";
 
-import debug from 'debug';
-import { isInStandaloneMode, registerCustomAppHeightCSSProperty } from './utils.ts';
-import { State, StatePersister } from './state/app-state.ts';
-import { isMcpMode } from './state/mcp-mode.ts';
-import { getSharedWasmModule } from './runner/wasm-module.ts';
-import type { ToolEventBuffer } from './state/mcp-app.ts';
-import type { App as McpApp_App } from '@modelcontextprotocol/ext-apps';
+import debug from "debug";
+import {
+  isInStandaloneMode,
+  registerCustomAppHeightCSSProperty,
+} from "./utils.ts";
+import { State, StatePersister } from "./state/app-state.ts";
+import { isMcpMode } from "./state/mcp-mode.ts";
+import { getSharedWasmModule } from "./runner/wasm-module.ts";
+import type { ToolEventBuffer } from "./state/mcp-app.ts";
+import type { App as McpApp_App } from "@modelcontextprotocol/ext-apps";
 
 import "primereact/resources/themes/lara-light-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
 import "primeflex/primeflex.min.css";
 
-const log = debug('app:log');
+const log = debug("app:log");
 
-if (process.env.NODE_ENV !== 'production') {
-  debug.enable('*');
-  log('Logging is enabled!');
+if (process.env.NODE_ENV !== "production") {
+  debug.enable("*");
+  log("Logging is enabled!");
 } else {
   debug.disable();
 }
 
-declare var BrowserFS: BrowserFSInterface
-
+declare var BrowserFS: BrowserFSInterface;
 
 // Start downloading and compiling the engine right away (not on `load`): it is on the critical path
 // to the first render.
-const visualStudio = new URLSearchParams(location.search).get('studio') === '1' && !isMcpMode();
+const visualStudio =
+  new URLSearchParams(location.search).get("studio") === "1" && !isMcpMode();
 if (!visualStudio) getSharedWasmModule();
 
-window.addEventListener('load', async () => {
+window.addEventListener("load", async () => {
   if (visualStudio) {
-    const {default: Studio} = await import('./studio/Studio');
-    ReactDOM.createRoot(document.getElementById('root')!).render(<Studio />);
+    const { default: Studio } = await import("./studio/Studio");
+    ReactDOM.createRoot(document.getElementById("root")!).render(<Studio />);
     return;
   }
   const mcpMode = isMcpMode();
@@ -56,37 +59,44 @@ window.addEventListener('load', async () => {
   let mcpApp: McpApp_App | undefined;
   let toolEvents: ToolEventBuffer | undefined;
   if (mcpMode) {
-    console.log('[MCP] Detected MCP mode (running in iframe)');
+    console.log("[MCP] Detected MCP mode (running in iframe)");
     // (The MCP SDK is only loaded in MCP mode.)
-    const { createMcpApp, bufferToolEvents } = await import('./state/mcp-app.ts');
+    const { createMcpApp, bufferToolEvents } = await import(
+      "./state/mcp-app.ts"
+    );
     mcpApp = createMcpApp();
     toolEvents = bufferToolEvents(mcpApp);
     try {
       await mcpApp.connect();
-      console.log('[MCP] Connected to host');
+      console.log("[MCP] Connected to host");
     } catch (err) {
-      console.error('[MCP] Failed to connect to host:', err);
+      console.error("[MCP] Failed to connect to host:", err);
       mcpApp = undefined; // fall back to standalone
     }
   }
 
-  console.log('[init] Creating editor FS...');
+  console.log("[init] Creating editor FS...");
   // In MCP mode, skip loading the library ZIPs on the main thread — workers load them independently.
   // Otherwise they are mounted after the first render (see App).
-  const fs = await createEditorFS({prefix: '/libraries/', allowPersistence: !mcpMode && isInStandaloneMode(), skipLibraries: mcpMode, deferArchives: !mcpMode});
-  console.log('[init] Editor FS created');
+  const fs = await createEditorFS({
+    prefix: "/libraries/",
+    allowPersistence: !mcpMode && isInStandaloneMode(),
+    skipLibraries: mcpMode,
+    deferArchives: !mcpMode,
+  });
+  console.log("[init] Editor FS created");
 
   const root = ReactDOM.createRoot(
-    document.getElementById('root') as HTMLElement
+    document.getElementById("root") as HTMLElement,
   );
 
   if (mcpMode && mcpApp && toolEvents) {
     // ─── MCP App mode ──────────────────────────────────────────────
     const statePersister: StatePersister = { set: async () => {} };
-    const initialState = createInitialState(null, { content: '' });
+    const initialState = createInitialState(null, { content: "" });
     initialState.view.embed = true; // the MCP app is an embedded viewer; the model can switch to 'full' with set_layout
 
-    const { McpApp } = await import('./components/McpApp.tsx');
+    const { McpApp } = await import("./components/McpApp.tsx");
     root.render(
       <React.StrictMode>
         <McpApp
@@ -96,7 +106,7 @@ window.addEventListener('load', async () => {
           app={mcpApp}
           toolEvents={toolEvents}
         />
-      </React.StrictMode>
+      </React.StrictMode>,
     );
   } else {
     // ─── Standalone mode ───────────────────────────────────────────
@@ -111,29 +121,31 @@ async function renderStandalone(fs: FS, root: ReactDOM.Root) {
     { registerOpenSCADLanguage },
     { readStateFromFragment, writeStateInFragment },
   ] = await Promise.all([
-    import('./components/App.tsx'),
-    import('./language/openscad-register-language.ts'),
-    import('./state/fragment-state.ts'),
+    import("./components/App.tsx"),
+    import("./language/openscad-register-language.ts"),
+    import("./state/fragment-state.ts"),
   ]);
 
-  await registerOpenSCADLanguage(fs, '/', zipArchives);
+  await registerOpenSCADLanguage(fs, "/", zipArchives);
 
   let statePersister: StatePersister;
   let persistedState: State | null = null;
 
   if (isInStandaloneMode()) {
-    const bfs: FS = (globalThis as any).BrowserFS.BFSRequire('fs');
+    const bfs: FS = (globalThis as any).BrowserFS.BFSRequire("fs");
     try {
-      const data = JSON.parse(new TextDecoder("utf-8").decode(bfs.readFileSync('/state.json')));
-      const {view, params} = data;
-      persistedState = {view, params};
+      const data = JSON.parse(
+        new TextDecoder("utf-8").decode(bfs.readFileSync("/state.json")),
+      );
+      const { view, params } = data;
+      persistedState = { view, params };
     } catch (e) {
-      console.log('Failed to read the persisted state from local storage.', e);
+      console.log("Failed to read the persisted state from local storage.", e);
     }
     statePersister = {
-      set: async ({view, params}) => {
-        bfs.writeFile('/state.json', JSON.stringify({view, params}));
-      }
+      set: async ({ view, params }) => {
+        bfs.writeFile("/state.json", JSON.stringify({ view, params }));
+      },
     };
   } else {
     persistedState = await readStateFromFragment();
@@ -142,11 +154,95 @@ async function renderStandalone(fs: FS, root: ReactDOM.Root) {
     };
   }
 
-  const initialState = createInitialState(persistedState);
+  let initialState = createInitialState(persistedState);
+  const workspaceId = new URLSearchParams(location.search).get("workspace");
+  if (workspaceId) {
+    try {
+      const {
+        loadWorkspace,
+        WorkspaceSession,
+        setWorkspaceSession,
+        persistedWorkspaceCode,
+        copyWorkspaceCode,
+        sameWorkspaceCode,
+      } = await import("./studio/workspace-store");
+      const record = await loadWorkspace(workspaceId);
+      if (record.mode !== "code")
+        throw Error(
+          "This shared workspace is currently in Visual Design. Open Code from its current visual document.",
+        );
+      const session = new WorkspaceSession(record);
+      setWorkspaceSession(session);
+      window.addEventListener("beforeunload", (event) => {
+        if (session.unsaved) {
+          event.preventDefault();
+          event.returnValue = "";
+        }
+      });
+      const restored = copyWorkspaceCode(record.code);
+      initialState = createInitialState({
+        params: restored.params,
+        view: restored.view ?? initialState.view,
+      });
+      // Linked projects already declare their exact OpenSCAD feature set.
+      // The legacy initializer appends defaults; keep the saved configuration.
+      initialState.params.features = [...record.code.params.features];
+      initialState.view = { ...initialState.view, linkedVisualWorkspace: true };
+      let lastSaved = persistedWorkspaceCode(initialState);
+      statePersister = {
+        set: async (state) => {
+          if (
+            sameWorkspaceCode(lastSaved, {
+              params: state.params,
+              view: state.view,
+            })
+          )
+            return;
+          const snapshot = persistedWorkspaceCode(state);
+          lastSaved = snapshot;
+          window.dispatchEvent(
+            new CustomEvent("forma3d-workspace-save", {
+              detail: "Saving shared code…",
+            }),
+          );
+          try {
+            await session.save(snapshot);
+            window.dispatchEvent(
+              new CustomEvent("forma3d-workspace-save", {
+                detail: session.unsaved
+                  ? "Saving shared code…"
+                  : "Shared code saved locally.",
+              }),
+            );
+          } catch (error) {
+            window.dispatchEvent(
+              new CustomEvent("forma3d-workspace-error", {
+                detail: `Shared code save failed: ${error}. Download your sources before leaving.`,
+              }),
+            );
+          }
+        },
+      };
+    } catch (error) {
+      root.render(
+        <main style={{ padding: 24 }}>
+          <h1>Shared workspace unavailable</h1>
+          <p role="alert">{String(error)}</p>
+          <a href="?studio=1">Open saved Visual Design</a>
+          <p>The saved source and visual documents have not been replaced.</p>
+        </main>,
+      );
+      return;
+    }
+  }
 
   root.render(
     <React.StrictMode>
-      <App initialState={initialState} statePersister={statePersister} fs={fs} />
-    </React.StrictMode>
+      <App
+        initialState={initialState}
+        statePersister={statePersister}
+        fs={fs}
+      />
+    </React.StrictMode>,
   );
 }

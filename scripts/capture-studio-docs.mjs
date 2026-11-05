@@ -234,8 +234,49 @@ try {
     path.join(root, "examples/forma3d/imported-mesh.stl"),
     Buffer.from(await page.evaluate(() => window.meshExampleDownload)),
   );
+  await page.waitForFunction(() =>
+    document.querySelector("footer")?.textContent.includes("Saved locally"),
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await click("New");
+  await click("＋ box");
+  for (const [label, value] of [
+    ["Width (mm)", 60],
+    ["Depth (mm)", 30],
+  ]) {
+    const input = await page.$(`input[aria-label="${label}"]`);
+    await input.focus();
+    await input.evaluate((e) => e.select());
+    await page.keyboard.type(String(value));
+    await page.keyboard.press("Enter");
+  }
+  await page.waitForFunction(() =>
+    document.querySelector("footer")?.textContent.includes("Saved locally"),
+  );
+  await click("Fit all");
+  await frame();
+  await page.screenshot({
+    path: path.join(root, "docs/images/studio-linked-visual.png"),
+  });
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load" }),
+    page.click('a[href="?"]'),
+  ]);
+  await page.waitForSelector(".monaco-editor .view-lines", { timeout: 45000 });
+  await page.waitForFunction(
+    () => document.querySelector("model-viewer.main-viewer")?.src,
+    { timeout: 60000 },
+  );
+  await page.waitForFunction(
+    () => document.querySelector("model-viewer.main-viewer")?.loaded,
+    { timeout: 30000 },
+  );
+  await frame();
+  await page.screenshot({
+    path: path.join(root, "docs/images/studio-linked-code.png"),
+  });
   console.log(
-    "Captured seven real application screenshots and the imported-mesh exact STL example",
+    "Captured nine real application screenshots and the imported-mesh exact STL example",
   );
 } finally {
   await browser?.close();

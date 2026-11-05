@@ -456,3 +456,62 @@ strict type check, documentation link review and zero installed-production audit
 advisories, these checks establish the tested scope; they do not certify unsupported
 formats, arbitrary mesh repair, other browser engines or general printability.
 `git diff --cached --check` passed. Existing webpack bundle/WASM size warnings remain.
+
+## Linked visual and Code workspaces (schema 6)
+
+Starting from `ba7643a`, the workspace links now carry the current model and
+sources through a revisioned IndexedDB handoff. Eight new unit cases bring the
+combined suite to **50 passing cases**. They cover native graph preservation,
+primitive dimensions/transforms and stable IDs, conservative SCAD parsing,
+unsupported semantics, native ZIP source metadata, dependency paths, declaration
+lifting and isolation from nested mutable editor state. The strict root type
+check and production webpack build pass; the existing bundle-size warnings remain.
+
+The final unit run invoked each TypeScript test file directly with the existing
+server `tsx` loader, so individual case counts were visible:
+
+```sh
+for suite in tests/foundation.test.tsx tests/studio-document.test.ts \
+  tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts \
+  tests/advanced-modeling.test.ts tests/mesh-import.test.ts \
+  tests/workspace-roundtrip.test.ts; do
+  node --import ./server/node_modules/tsx/dist/loader.mjs "$suite" || exit
+done
+npx --no-install tsc --noEmit
+npm run build
+```
+
+Seven new browser workflows use real typing, IndexedDB, native ZIP downloads,
+OpenSCAD workers and exported geometry. They check visual → Code → visual edits,
+stable primitive IDs and undo, Code/visual reloads, mesh dependency preservation,
+complex SCAD with module definitions, native save/open, invalid-source recovery,
+classic Code entry, stale-tab conflicts, included files, customizer overrides,
+and unchanged curve tessellation/volume after visual transforms.
+
+The initial browser runs exposed nested-state aliasing/default-feature injection,
+a source-wrapper scope error, and OpenSCAD's top-level-only `use` declarations.
+The fixes preserve immutable baselines and exact feature flags, use dedicated
+source modules with original curve defaults, and lift reachable local library
+uses into the scene entry. Test harness corrections account for editor bracket
+completion, background-tab animation frames, and classic hash autosaves that
+must not be mistaken for route navigation.
+
+All **seven production workspace workflows passed** against the built assets at
+`http://localhost:3000/dist/`. The MCP suite also passed all **115 non-browser
+checks** and its cross-origin browser render: 29 requests went to the asset
+origin, with no CSP violations. `scripts/capture-studio-docs.mjs` captured nine
+real application screenshots; the new matching Visual Design/Code pair was
+visually inspected. No environment or application deployment was performed.
+
+The first full development run passed 94 cases and hit the existing five-second
+default timeout in the multi-step native-import foundation test. It ran while
+other browser verification jobs were active. A standalone full rerun uses
+`--runInBand --testTimeout=15000`; explicit geometry timeouts and all assertions
+remain unchanged.
+
+The standalone final run passed **all 95 executed browser tests across 11
+suites**, with 26 conditional skips (four suites skipped). It completed in 455
+seconds with the documented 15-second default timeout. This includes all seven
+linked-workspace workflows and the original Code, visual, mesh, recovery, sketch,
+boolean, advanced-modeling and bundle regressions. No source changes followed
+that passing run.

@@ -1,3 +1,4 @@
+import { CodeProject, validateCodeProject } from "./code-project";
 import {
   MeshAsset,
   MeshUnit,
@@ -39,6 +40,7 @@ export interface Body {
   name: string;
   kind: Shape | "extrusion" | "template" | "mesh";
   meshAssetId?: string;
+  codeProject?: CodeProject;
   meshSource?: { format: MeshFormat; units: MeshUnit };
   template?: MechanicalSpec;
   extrusion?: Extrusion;
@@ -60,7 +62,7 @@ export interface BooleanFeature {
 export type Feature = BooleanFeature | ModelingFeature;
 export type Transformable = Body | ModelingFeature;
 export interface Design {
-  version: 5;
+  version: 6;
   meshAssets: MeshAsset[];
   name: string;
   units: "mm";
@@ -74,7 +76,7 @@ export interface History {
   future: Design[];
 }
 export const blankDesign = (): Design => ({
-  version: 5,
+  version: 6,
   meshAssets: [],
   features: [],
   print: structuredClone(defaultPrintSettings),
@@ -101,13 +103,15 @@ export function validateDesign(input: unknown): Design {
   const raw = input as { version?: unknown };
   const d = (
     raw.version === 1
-      ? { ...input, version: 5, features: [], meshAssets: [] }
+      ? { ...input, version: 6, features: [], meshAssets: [] }
       : raw.version === 2 || raw.version === 3 || raw.version === 4
-        ? { ...input, version: 5, meshAssets: [] }
-        : input
+        ? { ...input, version: 6, meshAssets: [] }
+        : raw.version === 5
+          ? { ...input, version: 6 }
+          : input
   ) as Design;
   if (
-    d.version !== 5 ||
+    d.version !== 6 ||
     !Array.isArray(d.meshAssets) ||
     d.meshAssets.length > 32 ||
     d.units !== "mm" ||
@@ -150,6 +154,14 @@ export function validateDesign(input: unknown): Design {
       typeof b.locked !== "boolean"
     )
       throw Error("Invalid or duplicate body.");
+    if (b.codeProject) {
+      if (b.kind !== "mesh")
+        throw Error("Linked SCAD source must reference a mesh snapshot.");
+      const p = validateCodeProject(b.codeProject);
+      for (const file of p.files)
+        if (file.meshAssetId && !assets.has(file.meshAssetId))
+          throw Error("Linked SCAD has a missing mesh dependency.");
+    }
     ids.add(b.id);
     if (
       b.kind === "mesh" &&
@@ -282,9 +294,14 @@ export function validateDesign(input: unknown): Design {
       );
   // Strip unrecognized fields so imported data cannot alter runtime-only state.
   return {
-    version: 5,
+    version: 6,
     meshAssets: meshAssets.filter((a) =>
-      d.bodies.some((b) => b.kind === "mesh" && b.meshAssetId === a.id),
+      d.bodies.some(
+        (b) =>
+          b.kind === "mesh" &&
+          (b.meshAssetId === a.id ||
+            b.codeProject?.files.some((f) => f.meshAssetId === a.id)),
+      ),
     ),
     print: {
       build: [...print.build],
@@ -320,6 +337,9 @@ export function validateDesign(input: unknown): Design {
             : b.kind === "template"
               ? templateSize(b.template!)
               : [...b.size],
+      ...(b.codeProject
+        ? { codeProject: validateCodeProject(b.codeProject) }
+        : {}),
       ...(b.kind === "mesh"
         ? {
             meshAssetId: b.meshAssetId,

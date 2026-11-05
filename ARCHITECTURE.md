@@ -74,8 +74,8 @@ validation pipeline. Source download bypasses geometry evaluation by design.
 6. IndexedDB persistence and versioned `.forma3d` ZIP containers preserve the
    feature graph, local assets, camera, units and print settings. Validate ZIP
    paths, expanded sizes, schema and references before committing a load.
-7. Visual Design and existing Code mode coexist. Generated code is read-only;
-   switching modes must never overwrite unrelated source-backed documents.
+7. Visual Design and Code share a revisioned local workspace. The generated
+   preview is read-only; explicit workspace links synchronize before navigation.
 
 ## Delivery gates
 
@@ -295,3 +295,29 @@ The viewport drawing buffer is resized on the next animation frame, without
 writing layout dimensions from ResizeObserver. An absolutely positioned canvas
 prevents intrinsic size feedback in wrapping narrow-screen layouts. Pending
 resize callbacks are canceled on disposal.
+
+## Linked workspaces (schema 6)
+
+`workspace-store.ts` stores revisioned `workspace:<uuid>` records alongside the
+existing recovery slot. A handoff persists the native baseline and a complete
+Code snapshot before navigating. IndexedDB compare-and-swap transactions reject
+stale tabs. Visual autosaves retain the last synchronized baseline separately
+from `editedVisual`, so reloads preserve edits without reusing stale generated
+code. Visual saves and handoffs drain the same write queue. Code snapshots copy
+nested mutable editor state; persistence compares source values rather than
+nested object identity. Linked startup restores the
+exact saved feature flags and uses final geometry instead of `$preview`.
+
+`scad-roundtrip.ts` tokenizes a conservative SCAD subset without executing
+JavaScript. Unchanged programs preserve the native graph. Generated primitive
+updates are accepted only when regenerated tokens match the edited source.
+Other code goes through isolated exact evaluation, independently of the Code
+preview/export cache. Schema 6 stores a validated `codeProject` on the resulting
+mesh body, with source files, customizer values and dependency references.
+`workspace-code.ts` reconstructs a scene that includes these retained programs
+inside a dedicated helper module called through the body's visual transforms.
+The helper resets curve defaults to the original OpenSCAD defaults, and its
+module body can contain included module definitions. Reachable local `use`
+declarations lift to the scene entry because OpenSCAD permits them only at top
+level; comment/string contents and unused files remain untouched. Source and
+dependency collisions fail explicitly. Native containers remain v1/v2; schema 1–5 documents migrate to 6.

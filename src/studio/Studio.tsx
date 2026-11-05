@@ -1,3 +1,11 @@
+import {
+  loadWorkspace,
+  openWorkspaceCode,
+  saveWorkspaceVisual,
+  workspaceUrl,
+  WorkspaceRecord,
+} from "./workspace-store";
+import { workspaceCodeForDesign } from "./workspace-code";
 import { MeshImportTools, MeshInspector, MeshPlacement } from "./MeshTools";
 import { MeshUnit, MeshAsset, MAX_IMPORT_BYTES } from "./mesh-asset";
 import { encodeScadBundle } from "./scad-bundle";
@@ -101,6 +109,9 @@ export default function Studio() {
   const [status, setStatus] = useState("Loading local recovery…");
   const [saveStatus, setSaveStatus] = useState("");
   const [ready, setReady] = useState(false);
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
+  const sharedWorkspace = useRef<WorkspaceRecord | undefined>(undefined);
+  const workspaceSaves = useRef<Promise<void>>(Promise.resolve());
   const [recoveryLoaded, setRecoveryLoaded] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,16 +120,69 @@ export default function Studio() {
   const revision = useRef(0);
   useEffect(() => {
     let active = true;
-    loadRecovery()
-      .then((d) => {
-        if (active) {
-          setRecoveryLoaded(true);
-          if (d) setHistory({ past: [], present: d, future: [] });
-          setStatus(d ? "Recovered local design" : "Ready • millimeters");
+    (async () => {
+      let recovered: Design | undefined,
+        readSucceeded = false,
+        recoveryError: unknown;
+      try {
+        recovered = await loadRecovery();
+        readSucceeded = true;
+      } catch (error) {
+        recoveryError = error;
+      }
+      let shared: WorkspaceRecord | undefined;
+      const id = new URLSearchParams(location.search).get("workspace");
+      if (id) {
+        try {
+          shared = await loadWorkspace(id);
+          if (shared.mode !== "visual")
+            throw Error(
+              "The shared workspace is still in Code mode. Return using its Visual Design link.",
+            );
+        } catch (error) {
+          if (active) {
+            setStatus(`Shared workspace unavailable: ${error}`);
+            setReady(true);
+          }
+          return;
         }
-      })
-      .catch((e) => active && setStatus(`Recovery unavailable: ${e}`))
-      .finally(() => active && setReady(true));
+      }
+      if (!active) return;
+      sharedWorkspace.current = shared;
+      if (shared) {
+        const previous = shared.previous ?? recovered;
+        setHistory({
+          past:
+            previous &&
+            JSON.stringify(previous) !==
+              JSON.stringify(shared.editedVisual ?? shared.visual)
+              ? [previous]
+              : [],
+          present: shared.editedVisual ?? shared.visual,
+          future: [],
+        });
+        setStatus(
+          shared.conversion === "source"
+            ? "Synchronized Code geometry with retained editable SCAD source."
+            : "Synchronized visual design and code.",
+        );
+      } else if (recovered) {
+        setHistory({ past: [], present: recovered, future: [] });
+        setStatus("Recovered local design");
+      } else
+        setStatus(
+          readSucceeded
+            ? "Ready • millimeters"
+            : `Recovery unavailable: ${recoveryError}`,
+        );
+      setRecoveryLoaded(readSucceeded);
+      setReady(true);
+    })().catch((error) => {
+      if (active) {
+        setStatus(`Workspace load failed: ${error}`);
+        setReady(true);
+      }
+    });
     return () => {
       active = false;
       job.current?.kill();
@@ -141,7 +205,17 @@ export default function Studio() {
     setSaveStatus("Saving locally…");
     const t = setTimeout(
       () =>
-        saveRecovery(design)
+        (workspaceSaves.current = workspaceSaves.current
+          .catch(() => {})
+          .then(async () => {
+            const prior = sharedWorkspace.current;
+            if (prior)
+              sharedWorkspace.current = await saveWorkspaceVisual(
+                prior,
+                design,
+              );
+            await saveRecovery(design);
+          }))
           .then(() => {
             if (current.current === design) {
               unsaved.current = false;
@@ -162,6 +236,32 @@ export default function Studio() {
       setStatus("Design updated");
     } catch (e) {
       setStatus(String(e));
+    }
+  };
+  const openCodeWorkspace = async () => {
+    if (!ready || busy || draft || editingSketch || switchingWorkspace) return;
+    setSwitchingWorkspace(true);
+    setStatus("Synchronizing this design with the Code workspace…");
+    const snapshot = current.current,
+      token = revision.current;
+    try {
+      await workspaceSaves.current;
+      const prior = sharedWorkspace.current;
+      const code =
+        prior && JSON.stringify(snapshot) === JSON.stringify(prior.visual)
+          ? prior.code
+          : workspaceCodeForDesign(snapshot);
+      const record = await openWorkspaceCode(snapshot, code, prior);
+      sharedWorkspace.current = record;
+      if (token !== revision.current)
+        throw Error(
+          "Design changed while switching. Open Code again for the current design.",
+        );
+      unsaved.current = false;
+      location.assign(workspaceUrl("code", record.id));
+    } catch (error) {
+      setStatus(`Workspace switch failed: ${error}`);
+      setSwitchingWorkspace(false);
     }
   };
   const changeFeature = (f: Feature) =>
@@ -551,16 +651,30 @@ export default function Studio() {
   const source = generateScad(design);
   return (
     <main className="studio">
-      <header inert={!!editingSketch}>
+      <header inert={!!editingSketch || switchingWorkspace}>
         <div>
           <strong>
             Forma<span>3D</span> Studio
           </strong>
           <small>VISUAL DESIGN • FOUNDATION</small>
         </div>
-        <a href={`?${location.hash}`}>Open Code workspace ↗</a>
+        <a
+          href="?"
+          aria-disabled={
+            !ready || busy || !!draft || !!editingSketch || switchingWorkspace
+          }
+          onClick={(e) => {
+            e.preventDefault();
+            void openCodeWorkspace();
+          }}
+        >
+          Open Code workspace ↗
+        </a>
       </header>
-      <nav aria-label="Project tools" inert={!!editingSketch}>
+      <nav
+        aria-label="Project tools"
+        inert={!!editingSketch || switchingWorkspace}
+      >
         <button
           disabled={!ready || !!editingSketch}
           onClick={() => {
@@ -916,6 +1030,16 @@ export default function Studio() {
                       : "centered origin"}
                 {body.locked ? " • locked" : ""}
               </p>
+              {body.codeProject && (
+                <section aria-label="Linked SCAD source">
+                  <h2>Source-backed SCAD</h2>
+                  <p>
+                    Original code and project files are retained. Transform this
+                    result or add visual features; use Open Code workspace to
+                    edit its SCAD.
+                  </p>
+                </section>
+              )}
               {body.kind === "mesh" && (
                 <MeshInspector
                   body={body}

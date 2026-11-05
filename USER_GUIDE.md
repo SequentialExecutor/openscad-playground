@@ -1,8 +1,9 @@
 # Forma3D Studio foundation guide
 
 Start the development server with `npm start` after the setup in README.md.
-Open the **Forma3D Studio · Visual Design** link in the regular editor. Code and
-Visual Design are separate documents; generated SCAD is read-only.
+Open `?studio=1` for Visual Design, or use **Forma3D Studio · Visual Design**
+in the regular editor to bring its current code into the visual workspace.
+The workspace links now carry the current design in both directions.
 
 1. Choose **box**, **sphere**, **cylinder** or **cone** from the left palette.
 2. Select a body in the list or click its surface in the workspace.
@@ -27,7 +28,7 @@ Visual Design are separate documents; generated SCAD is read-only.
    document during evaluation, retry the rejected export. Use Cancel export to
    stop it. Watch the status bar for errors and local-save failures.
 9. **Generated SCAD** opens read-only source with a download button. Use the
-   separate Code workspace for manually edited SCAD and the existing customizer,
+   **Open Code workspace** link for editable SCAD and the existing customizer,
    library support and additional export formats.
 
 Exported STL is in millimeters; many STL readers assume a unit because STL itself
@@ -258,7 +259,7 @@ assets totaling 20 MB of normalized binary STL. JSON metadata remains limited to
 2 MB; mesh-backed native archives are capped at 25 MB. Large files/assemblies may
 need simplification before importing.
 
-Mesh-backed projects use native container version 2 and document schema 5, with
+Mesh-backed projects use native container version 2 and document schema 6, with
 separate SHA-256-checked mesh files. Older valid projects migrate automatically.
 Undo/redo, duplication, locking, visibility and recovery preserve asset references.
 Unused mesh assets are removed when validating the document after body deletion.
@@ -271,3 +272,43 @@ Open [`imported-mesh.forma3d`](examples/forma3d/imported-mesh.forma3d) for an im
 the preserved source asset and boolean remain independently editable.
 
 ![Imported mesh source diagnostics and editable hole](docs/images/imported-mesh.png)
+
+## Switch between visual modeling and Code
+
+Use **Open Code workspace** to edit the current visual model as SCAD. Then use
+**Forma3D Studio · Visual Design** to bring the current code back. Switching
+saves the shared project before navigation; wait for the operation to finish.
+Both links use the same browser-local workspace, including imported mesh assets.
+Reloading either view keeps its latest saved work. The switch appears as one
+visual undo step, so **Undo** can restore the preceding visual design.
+
+Unchanged generated code retains the complete native graph, including sketches,
+templates and advanced features. Changes to generated primitive dimensions and
+transforms retain editable objects and their IDs. Simple standalone primitive
+and boolean code can also become native visual objects. Native SCAD is generated
+again after visual edits, so formatting and parameter expressions may change.
+
+For code outside that supported subset, Studio renders the exact current source
+as a **SCAD model** mesh and retains its source files and customizer values. You
+can move, rotate, scale and combine that object with visual features. Open Code
+again to edit the original program; the generated scene includes it with your
+visual transforms. Library `use` declarations move to the generated scene entry
+with annotations in the retained files. Edit those files, then select the
+generated scene entry before rendering or returning to Visual Design. Saving a
+`.forma3d` project preserves the retained source.
+Complex source does not acquire an invented primitive or sketch history.
+
+Invalid code, unsupported context-sensitive module introspection, invalid solids
+and oversized source bundles stop the switch and leave your code available.
+The converter allows 64 source files and 1 MB of text/embedded attachments;
+individual non-STL attachments are limited to 256 KB. Mesh limits still apply.
+If two tabs modify the same shared project, the stale tab reports a conflict
+rather than overwriting newer work. Download its source before reopening.
+
+Shared workspace URLs identify local IndexedDB records: they are not public
+sharing links. Keep `.forma3d` downloads as portable backups. Opening the plain
+Code URL starts the original standalone source workflow.
+
+![Visual design before switching](docs/images/studio-linked-visual.png)
+
+![Matching model in the linked Code workspace](docs/images/studio-linked-code.png)

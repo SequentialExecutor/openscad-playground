@@ -157,7 +157,7 @@ describe("Mesh import workflows", () => {
     expect(r.min).toEqual([-85, -100, 0]);
     expect(r.volume).toBeCloseTo(2000000, 1);
     const p = await project();
-    expect(p.version).toBe(5);
+    expect(p.version).toBe(6);
     expect(p.bodies[0].meshSource.units).toBe("cm");
     expect(p.meshAssets).toHaveLength(1);
     expect(p.meshAssets[0].data).toBeUndefined();

@@ -220,7 +220,7 @@ STL export and worker-based mesh analysis. The full planned feature set is not y
 Foundation regression checks (after `npm ci` in both root and `server/`):
 
 ```sh
-node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts tests/advanced-modeling.test.ts tests/mesh-import.test.ts
+node --import ./server/node_modules/tsx/dist/loader.mjs --test tests/foundation.test.tsx tests/studio-document.test.ts tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts tests/advanced-modeling.test.ts tests/mesh-import.test.ts tests/workspace-roundtrip.test.ts
 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node tests/foundation-browser.mjs
 ```
 
@@ -239,11 +239,15 @@ npm start
 For automated visual workflows, with system Chromium installed:
 
 ```sh
-CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js tests/studio-advanced.test.js tests/studio-mesh-import.test.js tests/studio-recovery.test.js
+CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInBand tests/studio.test.js tests/studio-booleans.test.js tests/studio-sketch.test.js tests/studio-advanced.test.js tests/studio-mesh-import.test.js tests/studio-recovery.test.js tests/studio-workspace.test.js
 ```
 
 Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.
 See [FEATURES.md](FEATURES.md) for the precise supported subset and limitations.
+
+The workspace links synchronize the current design between visual modeling and
+Code. See [the round-trip workflow](USER_GUIDE.md#switch-between-visual-modeling-and-code)
+for native edits, retained SCAD sources and supported limits.
 
 ### Screenshots
 

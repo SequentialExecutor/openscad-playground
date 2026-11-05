@@ -126,9 +126,13 @@ load can still depend on network access/caching; complete offline operation is
 not guaranteed. Geometry evaluation runs locally in the browser worker.
 
 The Code workspace also includes a **Forma3D Studio · Visual Design** link.
-The visual and source workspaces have separate documents. Generated visual-model
-SCAD is read-only; switching workspaces does not reconstruct arbitrary SCAD into
-an editable feature history.
+Both workspace links synchronize the current design before switching. Native
+primitive edits remain editable visual objects; complex SCAD becomes an exact
+source-backed mesh with its original code retained. The Generated SCAD panel
+remains read-only; use **Open Code workspace** for editing. See the
+[round-trip workflow and limits](USER_GUIDE.md#switch-between-visual-modeling-and-code).
+Shared workspace URLs are local to this browser; use native downloads to move
+projects between browsers.
 
 Stop the development server with Ctrl+C. To choose another development port:
 
@@ -213,7 +217,8 @@ npx --no-install tsc --noEmit
 node --import ./server/node_modules/tsx/dist/loader.mjs --test \
   tests/foundation.test.tsx tests/studio-document.test.ts \
   tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts \
-  tests/advanced-modeling.test.ts tests/mesh-import.test.ts
+  tests/advanced-modeling.test.ts tests/mesh-import.test.ts \
+  tests/workspace-roundtrip.test.ts
 ```
 
 On Debian/Ubuntu, install Chromium for browser checks if you skipped Puppeteer's
@@ -222,7 +227,7 @@ browser download:
 ```sh
 sudo apt-get install -y chromium
 CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-npm run test:e2e -- --runInBand
+npm run test:e2e -- --runInBand --testTimeout=15000
 ```
 
 Stop an independently started development server first: Jest starts its own on
@@ -296,7 +301,7 @@ cache previous application assets; reload and, if necessary, update/unregister
 that origin's service worker. Avoid clearing site storage before downloading
 recovery data, since it can delete the only local project copy.
 
-Schema-1/2/3/4 projects migrate to schema 5. Native containers without mesh assets
+Schema-1/2/3/4/5 projects migrate to schema 6. Native containers without mesh assets
 remain version 1; projects with meshes use version 2, embedding SHA-256-checked
 normalized STL assets. The file extension remains `.forma3d`. A SCAD download for
 a mesh-backed model is a ZIP containing `design.scad` and its `meshes/` directory;

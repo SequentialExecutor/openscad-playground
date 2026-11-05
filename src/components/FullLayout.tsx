@@ -1,22 +1,28 @@
+import WorkspaceLink from "./WorkspaceLink";
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
-import React, { CSSProperties, useContext } from 'react';
-import { MultiLayoutComponentId } from '../state/app-state';
-import EditorPanel from './EditorPanel';
-import ViewerPanel, { ViewerPanelHandle } from './ViewerPanel';
-import Footer from './Footer';
-import { ModelContext } from './contexts';
-import PanelSwitcher from './PanelSwitcher';
-import { ConfirmDialog } from 'primereact/confirmdialog';
-import CustomizerPanel from './CustomizerPanel';
-import WasmStatusBanner from './WasmStatusBanner';
-import { isMcpMode } from '../state/mcp-mode';
+import React, { CSSProperties, useContext, useState } from "react";
+import { MultiLayoutComponentId } from "../state/app-state";
+import EditorPanel from "./EditorPanel";
+import ViewerPanel, { ViewerPanelHandle } from "./ViewerPanel";
+import Footer from "./Footer";
+import { ModelContext } from "./contexts";
+import PanelSwitcher from "./PanelSwitcher";
+import { ConfirmDialog } from "primereact/confirmdialog";
+import CustomizerPanel from "./CustomizerPanel";
+import WasmStatusBanner from "./WasmStatusBanner";
+import { isMcpMode } from "../state/mcp-mode";
 
 /** The full UI: tab bar, editor / viewer / customizer panels and footer. */
-export default function FullLayout({viewerRef}: {viewerRef?: React.Ref<ViewerPanelHandle>}) {
+export default function FullLayout({
+  viewerRef,
+}: {
+  viewerRef?: React.Ref<ViewerPanelHandle>;
+}) {
   const model = useContext(ModelContext);
-  if (!model) throw new Error('No model');
+  if (!model) throw new Error("No model");
   const state = model.state;
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
 
   const zIndexOfPanelsDependingOnFocus = {
     editor: {
@@ -33,54 +39,77 @@ export default function FullLayout({viewerRef}: {viewerRef?: React.Ref<ViewerPan
       editor: 0,
       viewer: 1,
       customizer: 3,
-    }
-  }
+    },
+  };
 
-  const layout = state.view.layout
+  const layout = state.view.layout;
   const mode = state.view.layout.mode;
   function getPanelStyle(id: MultiLayoutComponentId): CSSProperties {
-    if (layout.mode === 'multi') {
-      const itemCount = (layout.editor ? 1 : 0) + (layout.viewer ? 1 : 0) + (layout.customizer ? 1 : 0)
+    if (layout.mode === "multi") {
+      const itemCount =
+        (layout.editor ? 1 : 0) +
+        (layout.viewer ? 1 : 0) +
+        (layout.customizer ? 1 : 0);
       return {
         flex: 1,
-        maxWidth: Math.floor(100/itemCount) + '%',
-        display: (state.view.layout as any)[id] ? 'flex' : 'none'
-      }
+        maxWidth: Math.floor(100 / itemCount) + "%",
+        display: (state.view.layout as any)[id] ? "flex" : "none",
+      };
     } else {
       return {
         flex: 1,
-        zIndex: Number((zIndexOfPanelsDependingOnFocus as any)[id][layout.focus]),
-      }
+        zIndex: Number(
+          (zIndexOfPanelsDependingOnFocus as any)[id][layout.focus],
+        ),
+      };
     }
   }
 
   return (
-    <div className='flex flex-column' style={{
+    <div
+      className="flex flex-column"
+      style={{
         flex: 1,
-      }}>
-      
-      {!isMcpMode() && <a href={`?studio=1${window.location.hash}`} style={{padding: "8px 14px", fontWeight: 600}}>Forma3D Studio · Visual Design ↗</a>}
+      }}
+    >
+      <WorkspaceLink onBusyChange={setSwitchingWorkspace} />
       <PanelSwitcher />
 
       <WasmStatusBanner />
 
-      <div className={mode === 'multi' ? 'flex flex-row' : 'flex flex-column'}
-          style={mode === 'multi' ? {flex: 1} : {
-            flex: 1,
-            position: 'relative'
-          }}>
-
-        <EditorPanel className={`
+      <div
+        inert={switchingWorkspace}
+        className={mode === "multi" ? "flex flex-row" : "flex flex-column"}
+        style={
+          mode === "multi"
+            ? { flex: 1 }
+            : {
+                flex: 1,
+                position: "relative",
+              }
+        }
+      >
+        <EditorPanel
+          className={`
           opacity-animated
-          ${layout.mode === 'single' && layout.focus !== 'editor' ? 'opacity-0' : ''}
-          ${layout.mode === 'single' ? 'absolute-fill' : ''}
-        `} style={getPanelStyle('editor')} />
-        <ViewerPanel ref={viewerRef} className={layout.mode === 'single' ? `absolute-fill` : ''} style={getPanelStyle('viewer')} />
-        <CustomizerPanel className={`
+          ${layout.mode === "single" && layout.focus !== "editor" ? "opacity-0" : ""}
+          ${layout.mode === "single" ? "absolute-fill" : ""}
+        `}
+          style={getPanelStyle("editor")}
+        />
+        <ViewerPanel
+          ref={viewerRef}
+          className={layout.mode === "single" ? `absolute-fill` : ""}
+          style={getPanelStyle("viewer")}
+        />
+        <CustomizerPanel
+          className={`
           opacity-animated
-          ${layout.mode === 'single' && layout.focus !== 'customizer' ? 'opacity-0' : ''}
-          ${layout.mode === 'single' ? `absolute-fill` : ''}
-        `} style={getPanelStyle('customizer')} />
+          ${layout.mode === "single" && layout.focus !== "customizer" ? "opacity-0" : ""}
+          ${layout.mode === "single" ? `absolute-fill` : ""}
+        `}
+          style={getPanelStyle("customizer")}
+        />
       </div>
 
       <Footer />

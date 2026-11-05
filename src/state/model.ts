@@ -415,6 +415,7 @@ export class Model {
   }
 
   async render({isPreview, mountArchives, now, retryInOtherDim}: {isPreview: boolean, mountArchives?: boolean, now: boolean, retryInOtherDim?: boolean}) {
+    if (this.state.view.linkedVisualWorkspace) isPreview = false;
     // console.log(JSON.stringify(this.state, null, 2));
     mountArchives ??= true;
     retryInOtherDim ??= true;
