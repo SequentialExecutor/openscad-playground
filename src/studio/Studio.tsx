@@ -1,11 +1,16 @@
 import {
+  generateReadableScad,
+  hasMeshBodies,
+  importedCodeReason,
+} from "./readable-scad";
+import {
   loadWorkspace,
   openWorkspaceCode,
   saveWorkspaceVisual,
   workspaceUrl,
   WorkspaceRecord,
 } from "./workspace-store";
-import { workspaceCodeForDesign } from "./workspace-code";
+import { workspaceCodeForDesign, hasGeneratedModules } from "./workspace-code";
 import { MeshImportTools, MeshInspector, MeshPlacement } from "./MeshTools";
 import { MeshUnit, MeshAsset, MAX_IMPORT_BYTES } from "./mesh-asset";
 import { encodeScadBundle } from "./scad-bundle";
@@ -163,7 +168,7 @@ export default function Studio() {
         });
         setStatus(
           shared.conversion === "source"
-            ? "Synchronized Code geometry with retained editable SCAD source."
+            ? "Recovered a legacy mesh snapshot. Code is unavailable while mesh bodies remain."
             : "Synchronized visual design and code.",
         );
       } else if (recovered) {
@@ -240,6 +245,10 @@ export default function Studio() {
   };
   const openCodeWorkspace = async () => {
     if (!ready || busy || draft || editingSketch || switchingWorkspace) return;
+    if (hasMeshBodies(current.current)) {
+      setStatus(importedCodeReason);
+      return;
+    }
     setSwitchingWorkspace(true);
     setStatus("Synchronizing this design with the Code workspace…");
     const snapshot = current.current,
@@ -248,7 +257,9 @@ export default function Studio() {
       await workspaceSaves.current;
       const prior = sharedWorkspace.current;
       const code =
-        prior && JSON.stringify(snapshot) === JSON.stringify(prior.visual)
+        prior &&
+        JSON.stringify(snapshot) === JSON.stringify(prior.visual) &&
+        !hasGeneratedModules(prior.code)
           ? prior.code
           : workspaceCodeForDesign(snapshot);
       const record = await openWorkspaceCode(snapshot, code, prior);
@@ -603,7 +614,7 @@ export default function Studio() {
             "Design changed during analysis. Analyze the current revision again.",
           );
         setAnalysis({
-          source: generateScad(snapshot),
+          source: generateReadableScad(snapshot),
           settings: JSON.stringify(printSettings),
           report,
         });
@@ -648,7 +659,8 @@ export default function Studio() {
       setStatus(`Save failed: ${e}`);
     }
   };
-  const source = generateScad(design);
+  const source = generateReadableScad(design);
+  const containsMesh = hasMeshBodies(design);
   return (
     <main className="studio">
       <header inert={!!editingSketch || switchingWorkspace}>
@@ -659,16 +671,27 @@ export default function Studio() {
           <small>VISUAL DESIGN • FOUNDATION</small>
         </div>
         <a
-          href="?"
+          href={containsMesh ? undefined : "?"}
+          role="link"
+          title={
+            containsMesh ? importedCodeReason : "Edit native shapes as OpenSCAD"
+          }
           aria-disabled={
-            !ready || busy || !!draft || !!editingSketch || switchingWorkspace
+            !ready ||
+            busy ||
+            !!draft ||
+            !!editingSketch ||
+            switchingWorkspace ||
+            containsMesh
           }
           onClick={(e) => {
             e.preventDefault();
             void openCodeWorkspace();
           }}
         >
-          Open Code workspace ↗
+          {containsMesh
+            ? "Code unavailable — mesh in design"
+            : "Open Code workspace ↗"}
         </a>
       </header>
       <nav
@@ -1035,8 +1058,8 @@ export default function Studio() {
                   <h2>Source-backed SCAD</h2>
                   <p>
                     Original code and project files are retained. Transform this
-                    result or add visual features; use Open Code workspace to
-                    edit its SCAD.
+                    result or add visual features. Retained source stays in the
+                    native project; mesh bodies block Code access.
                   </p>
                 </section>
               )}
@@ -1184,8 +1207,9 @@ export default function Studio() {
             <summary>Current modeling limits</summary>
             <p>
               Primitive solids, editable booleans, native projects and bounded
-              mesh inspection and sketch extrusions are available. Mesh imports
-              and advanced solid operations are still pending. Mesh analysis
+              mesh inspection, sketch extrusions, mesh imports and bounded
+              advanced modeling are available. Mesh bodies disable the Code
+              workspace; arbitrary edge editing is not supported. Mesh analysis
               does not certify printability.
             </p>
           </details>

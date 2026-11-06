@@ -381,6 +381,10 @@ measurements before the body's transforms or dependent booleans. Use exact mesh
 analysis for final world geometry. Imported geometry does not become a complete
 editable CAD sketch/feature history; use numeric transforms and the normal gizmos.
 
+Imported meshes remain visual geometry: the Code link is disabled while any
+mesh body remains, even if it is hidden or consumed by a feature. Visual modeling,
+native save/open, exact STL export, and the read-only SCAD download remain available.
+
 Closed, consistently oriented edge topology allows boolean, mirror, pattern and
 group features. Editing an imported operand's transform recomputes its dependents.
 Open/defective meshes remain displayable, transformable and savable with diagnostics,
@@ -420,7 +424,10 @@ the preserved source asset and boolean remain independently editable.
 Use **Open Code workspace** to edit the current visual model as SCAD. Then use
 **Forma3D Studio · Visual Design** to bring the current code back. Switching
 saves the shared project before navigation; wait for the operation to finish.
-Both links use the same browser-local workspace, including imported mesh assets.
+Both links use the same browser-local workspace for native shapes. **If any mesh
+body exists, Open Code workspace is disabled**, including hidden meshes and mesh
+operands inside a boolean or pattern. Remove all mesh bodies to enable it again.
+Importing triangles does not create editable OpenSCAD construction steps.
 Reloading either view keeps its latest saved work. The switch appears as one
 visual undo step, so **Undo** can restore the preceding visual design.
 
@@ -428,7 +435,7 @@ To continue the first-part tutorial in Code:
 
 1. Save a native backup, then choose **Open Code workspace**.
 2. Find `cube([60,40,6], center=true);` in the generated scene. Change **60** to
-   **70**, leaving its surrounding module and transforms intact.
+   **70**, leaving its surrounding operation and transforms intact.
 3. Wait for the Code preview to update and for the shared-code save status.
 4. Choose **Forma3D Studio · Visual Design**. Select **Box** in Objects: its width
    is now **70 mm**, with the centered cutter still referenced by Difference.
@@ -445,20 +452,30 @@ transforms retain editable objects and their IDs. Simple standalone primitive
 and boolean code can also become native visual objects. Native SCAD is generated
 again after visual edits, so formatting and parameter expressions may change.
 
-For code outside that supported subset, Studio renders the exact current source
-as a **SCAD model** mesh and retains its source files and customizer values. You
-can move, rotate, scale and combine that object with visual features. Open Code
-again to edit the original program; the generated scene includes it with your
-visual transforms. Library `use` declarations move to the generated scene entry
-with annotations in the retained files. Edit those files, then select the
-generated scene entry before rendering or returning to Visual Design. Saving a
-`.forma3d` project preserves the retained source.
-Complex source does not acquire an invented primitive or sketch history.
+Generated source uses direct OpenSCAD primitives and operations, without generated
+object modules or `n0()` aliases. For example, the first part is expressed as:
 
-Invalid code, unsupported context-sensitive module introspection, invalid solids
-and oversized source bundles stop the switch and leave your code available.
-The converter allows 64 source files and 1 MB of text/embedded attachments;
-individual non-STL attachments are limited to 256 KB. Mesh limits still apply.
+```scad
+$fn=64;
+difference() {
+  translate([0,0,3])
+  cube([60,40,6], center=true);
+  translate([0,0,3])
+  cylinder(h=12, d=8, center=true);
+}
+```
+
+Cylinders use their actual diameter and height; spheres use their actual diameter.
+An elliptical shape adds an explicit scale. Patterns expose `for`, `translate`
+and `rotate`; sketches expose their profile and extrusion operations.
+
+Code outside the supported native-editing subset stays in Code with an
+explanation. It is **not** converted into an opaque mesh object to force a visual
+handoff. Your source remains intact. Unchanged generated code can return to its
+existing native graph; unsupported structural edits must remain in Code.
+Generated editable source is limited to 1 MB. The original standalone Code editor
+still supports its broader OpenSCAD workflows.
+
 If two tabs modify the same shared project, the stale tab reports a conflict
 rather than overwriting newer work. Download its source before reopening.
 
@@ -505,6 +522,7 @@ around the origin when you rotate its result.
 | An imported mesh displays but cannot be used as a solid | Read its topology diagnostics. Repair the source in another mesh tool and reimport; displayable open surfaces are not accepted as closed solids. |
 | An import is rejected | Check format support, embedded resources, units and the size/triangle limits above. Unsupported input leaves the current design intact. |
 | Autosave is paused or fails | Download **Save project** immediately. Check browser storage; keep the downloaded backup before reloading. |
+| Code is unavailable after import | Remove every mesh body, including hidden/consumed operands, to restore Code access. Native shapes appear as direct OpenSCAD expressions. |
 | A Code switch fails | Read the message and correct the current source or unsupported input. Your code remains available; the visual document is not replaced by a failed conversion. |
 | Another-tab conflict is reported | Download the current tab's source/project before reopening the workspace containing the newer work. |
 | A workspace URL does not work in another browser | It refers to local data. Transfer a `.forma3d` file and use **Open project** instead. |
@@ -529,6 +547,7 @@ Download the native file, then choose **Open project**. On GitHub, use the file'
 A **body** is a primitive, extrusion, template or mesh. A **feature** produces a
 result from one or more inputs. An **operand** is an input to a boolean. A
 **root** is a result not consumed by another feature; visible roots make up the
-final exported model. A **source-backed model** is evaluated SCAD geometry with
-its program retained for editing in Code. An **exact result** comes from the
+final exported model. Older projects may contain a **source-backed model**: an evaluated SCAD mesh
+with archived source. Those files remain readable, but their mesh bodies block
+Code access just like imported meshes. An **exact result** comes from the
 OpenSCAD worker rather than a temporary interactive preview.

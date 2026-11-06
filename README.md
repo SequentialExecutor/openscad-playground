@@ -254,8 +254,9 @@ CI=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --runInB
 Three.js and its types are pinned; no React, webpack or OpenSCAD upgrade is needed.
 See [FEATURES.md](FEATURES.md) for the precise supported subset and limitations.
 
-The workspace links synchronize the current design between visual modeling and
-Code. See [the round-trip workflow](USER_GUIDE.md#switch-between-visual-modeling-and-code)
+The workspace links synchronize native shapes as direct OpenSCAD expressions,
+without generated object modules. Importing a mesh disables switching to Code
+until all mesh bodies are removed. See [the round-trip workflow](USER_GUIDE.md#switch-between-visual-modeling-and-code)
 for native edits, retained SCAD sources and supported limits.
 
 ### Screenshots

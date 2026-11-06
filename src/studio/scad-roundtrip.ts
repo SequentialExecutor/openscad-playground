@@ -8,8 +8,10 @@ import {
   createBoolean,
   validateDesign,
   generateScad,
+  rootNodes,
 } from "./document";
 import type { CodeProject } from "./code-project";
+import { generateReadableScad } from "./readable-scad";
 type Value = number | boolean | string | Value[];
 type Args = { named: Record<string, Value>; pos: Value[] };
 type Node = { name: string; args: Args; children: Node[] };
@@ -491,6 +493,96 @@ export function updateNativeFromCode(
     }
     const valid = validateDesign(d);
     return normalizedScad(generateScad(valid)) === normalizedScad(edited)
+      ? valid
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Match direct expressions to their existing visual inputs, then verify the
+ * entire regenerated program. Ambiguous edits remain in Code instead of being
+ * guessed from an evaluated mesh. */
+export function updateReadableFromCode(
+  base: Design,
+  original: string,
+  edited: string,
+  vars: Record<string, unknown> = {},
+): Design | undefined {
+  try {
+    if (Object.keys(vars).length) return undefined;
+    if (normalizedScad(original) === normalizedScad(edited))
+      return validateDesign(base);
+    const p = new Parser(scadTokens(edited)).parse();
+    if (
+      p.modules.size ||
+      p.env.$fn !== 64 ||
+      Object.keys(p.env).some((k) => k !== "$fn")
+    )
+      return undefined;
+    const d = structuredClone(base),
+      nodes = new Map([...base.bodies, ...base.features].map((n) => [n.id, n]));
+    const updates = new Map<string, Body>();
+    const visit = (id: string, node: Node) => {
+      const old = nodes.get(id)!;
+      if ("inputs" in old) {
+        if (
+          "spec" in old ||
+          node.name !== old.operation ||
+          node.children.length !== old.inputs.length
+        )
+          throw Error("Feature structure changed.");
+        noExtra(node, [], 0);
+        old.inputs.forEach((child, i) => visit(child, node.children[i]));
+        return;
+      }
+      if (!["box", "sphere", "cylinder", "cone"].includes(old.kind))
+        throw Error("Not a native primitive.");
+      const b = structuredClone(old);
+      for (const [name, field, identity] of [
+        ["translate", "position", 0],
+        ["rotate", "rotation", 0],
+        ["scale", "scale", 1],
+      ] as const) {
+        if (!old[field].some((v) => v !== identity)) continue;
+        if (node.name !== name || node.children.length !== 1)
+          throw Error("Transform structure changed.");
+        noExtra(node, [name === "rotate" ? "a" : "v"], 1);
+        b[field] = vec(arg(node, name === "rotate" ? "a" : "v", 0));
+        node = node.children[0];
+      }
+      let stretch: Vec3 = [1, 1, 1];
+      if (
+        old.kind !== "box" &&
+        (old.size[1] !== old.size[0] ||
+          (old.kind === "sphere" && old.size[2] !== old.size[0]))
+      ) {
+        if (node.name !== "scale" || node.children.length !== 1)
+          throw Error("Ellipse structure changed.");
+        noExtra(node, ["v"], 1);
+        stretch = vec(arg(node, "v", 0));
+        node = node.children[0];
+      }
+      const shape = primitive(node, 64);
+      if (
+        node.name !== "sphere" &&
+        arg(node, "center", node.name === "cube" ? 1 : 3, false) !== true
+      )
+        throw Error("Centering changed.");
+      b.kind = shape.body.kind;
+      b.size = shape.body.size.map((v, i) => v * stretch[i]) as Vec3;
+      const prior = updates.get(id);
+      if (prior && JSON.stringify(prior) !== JSON.stringify(b))
+        throw Error("Shared input edited inconsistently.");
+      updates.set(id, b);
+    };
+    const roots = rootNodes(base);
+    if (roots.length !== p.roots.length) return undefined;
+    roots.forEach((root, i) => visit(root.id, p.roots[i]));
+    d.bodies = d.bodies.map((b) => updates.get(b.id) ?? b);
+    const valid = validateDesign(d);
+    return normalizedScad(generateReadableScad(valid)) ===
+      normalizedScad(edited)
       ? valid
       : undefined;
   } catch {

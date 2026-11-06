@@ -538,3 +538,35 @@ example was independently decoded with the project loader and checked for its
 schema, dimensions, positions and boolean references. All 39 local guide/example
 links, image paths and heading anchors were checked, including the prominent
 README guide link. No application source changed in this documentation update.
+
+## Direct native SCAD and mesh-restricted Code access
+
+The visual add-on now emits direct OpenSCAD expressions in the editable workspace,
+Generated SCAD preview and SCAD downloads. Shapes expose real dimensions; boolean
+and pattern expressions are expanded without generated object modules or aliases.
+The private module-based generator remains in use for worker evaluation. Any mesh
+body blocks a Code handoff at both the UI and persistence boundary, including
+hidden/consumed inputs and legacy source-backed meshes. Unsupported source stays
+in Code instead of being substituted with an opaque mesh.
+
+All **53 unit cases**, the strict type check and production build pass. Workspace
+coverage verifies primitive edits and IDs, real diameter/height parameters,
+pattern and elliptical-cylinder exact STL equivalence, mesh restrictions and
+re-enabling after deletion, source preservation on unsupported programs, and
+migration of older module-based records even without their original header.
+Token-based migration ignores module-like text in comments and strings.
+
+The wider visual regression run passed 45 cases and exposed a report-cache mismatch:
+analysis stored private evaluation text while the report display compared public
+SCAD. The report fingerprint now uses the same public source. The affected boolean
+and workspace suites then passed **all 11 checks**. The final production run passed
+**all 16 selected checks** across the workspace, original Code and bundle suites;
+45 unrelated Code cases were excluded by filtering. No assertions were disabled.
+
+All **12 real application screenshots** were regenerated. The imported-mesh image
+shows the unavailable Code link, and the Code images contain direct shape/boolean
+expressions. The documentation capture completed its exact STL, Code width-edit
+and Undo checks. Its paste verification now accepts Monaco's actual indentation
+while still requiring the edited dimensions, a durable save and correct visual
+results. All 39 local guide/example links, image references and anchors passed
+validation. Existing native projects remain readable; no document schema changed.

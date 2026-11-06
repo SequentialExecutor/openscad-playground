@@ -1,3 +1,4 @@
+import { generateReadableScad } from "../src/studio/readable-scad";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
@@ -232,7 +233,7 @@ test("native container v2 and SCAD bundles preserve hashed mesh assets and rejec
   assert.ok(scad.file(`meshes/${a.id}.stl`));
   assert.equal(
     await scad.file("design.scad")!.async("string"),
-    generateScad(d),
+    generateReadableScad(d),
   );
   z.file(`meshes/${a.id}.stl`, new Uint8Array(meshInfo(a).data).fill(0), {
     createFolders: false,

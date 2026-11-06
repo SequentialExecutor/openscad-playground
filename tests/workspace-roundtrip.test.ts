@@ -86,7 +86,7 @@ test("primitive code with constants, transforms and booleans becomes editable na
   assert.ok(cone);
   assert.equal(cone.bodies[0].kind, "cone");
 });
-test("unsupported semantics stay source-backed rather than guessing geometry", () => {
+test("unsupported semantics are rejected by native parsing rather than guessed from geometry", () => {
   for (const s of [
     "a=10;cube(a);a=20;",
     "translate(10) cube(10);",
@@ -116,21 +116,35 @@ test("invalid/structural code edits cannot silently reinterpret a native documen
   current.params.sources[0].content = "cube(";
   assert.equal(nativeCodeRoundTrip(d, code, current), undefined);
 });
-test("linked source metadata and dependencies persist in native containers and generated Code projects", async () => {
+test("legacy retained source survives native saves but all mesh geometry blocks Code", async () => {
   const a = await parseMesh(binaryStl(), "cube.stl", "mm"),
     d = blankDesign(),
-    b = createMeshBody(a, "Source result", "preserve");
-  b.codeProject = project("for(i=[0:1]) translate([i*20,0,0]) cube(10);");
+    b = createMeshBody(a, "Imported cube", "preserve");
   d.bodies = [b];
   d.meshAssets = [a];
-  const bytes = await encodeProject(d),
-    restored = await decodeProject(new Uint8Array(bytes).buffer);
-  assert.deepEqual(restored, validateDesign(d));
-  const code = workspaceCodeForDesign(d);
-  assert.ok(
-    code.params.sources.some((s) => s.content?.includes("for(i=[0:1])")),
+  assert.throws(
+    () => workspaceCodeForDesign(d),
+    /contains imported or mesh geometry/,
   );
-  assert.match(code.params.sources[0].content!, /include <\/test.scad>/);
+  b.visible = false;
+  assert.throws(
+    () => workspaceCodeForDesign(d),
+    /contains imported or mesh geometry/,
+  );
+  b.codeProject = project("for(i=[0:1]) translate([i*20,0,0]) cube(10);");
+  const restored = await decodeProject(
+    new Uint8Array(await encodeProject(d)).buffer,
+  );
+  assert.deepEqual(restored, validateDesign(d));
+  assert.throws(
+    () => workspaceCodeForDesign(restored),
+    /contains imported or mesh geometry/,
+  );
+  const { openWorkspaceCode } = await import("../src/studio/workspace-store");
+  await assert.rejects(
+    () => openWorkspaceCode(restored, workspaceCodeForDesign(blankDesign())),
+    /contains imported or mesh geometry/,
+  );
   assert.throws(
     () =>
       validateCodeProject({
@@ -140,14 +154,6 @@ test("linked source metadata and dependencies persist in native containers and g
         ],
       }),
     /embedded/,
-  );
-  assert.throws(
-    () =>
-      validateCodeProject({
-        ...project("cube(1);"),
-        entryPath: "/../escape.scad",
-      }),
-    /Invalid/,
   );
 });
 
@@ -169,47 +175,59 @@ test("shared Code snapshots do not alias nested editor mutations or their native
   assert.ok(nativeCodeRoundTrip(d, baseline, code));
 });
 
-test("reachable use declarations lift to the scene entry without changing archived source or unused files", async () => {
-  const a = await parseMesh(binaryStl(), "cube.stl", "mm"),
-    d = blankDesign(),
-    b = createMeshBody(a, "Code", "preserve");
-  b.codeProject = {
-    entryPath: "/code/main.scad",
-    files: [
-      {
-        path: "/code/main.scad",
-        content:
-          '// use <ignored.scad>\necho("use <also-ignored.scad>");\ninclude <sub/part.scad>\n',
-      },
-      {
-        path: "/code/sub/part.scad",
-        content: "use <../../lib/piece%name.scad>\npiece();",
-      },
-      { path: "/lib/piece%name.scad", content: "module piece(){cube(10);}" },
-      { path: "/unused.scad", content: "use <unused-library.scad>" },
-    ],
-    vars: {},
-    features: [],
-  };
-  d.bodies = [b];
-  d.meshAssets = [a];
-  const original = structuredClone(b.codeProject),
-    code = workspaceCodeForDesign(d);
-  assert.match(
-    code.params.sources[0].content!,
-    /^use <\/lib\/piece%name.scad>/,
+test("direct OpenSCAD uses native shape dimensions and nested booleans without object modules", () => {
+  const d = blankDesign(),
+    box = createBody("box"),
+    cylinder = createBody("cylinder");
+  d.bodies = [box, cylinder];
+  d.features = [createBoolean("difference", [box.id, cylinder.id])];
+  const source = workspaceCodeForDesign(d).params.sources[0].content!;
+  assert.match(source, /difference\(\) \{/);
+  assert.match(source, /cube\(\[20,20,20\], center=true\)/);
+  assert.match(source, /cylinder\(h=20, d=20, center=true\)/);
+  assert.doesNotMatch(source, /\bmodule\b|\bn\d+\s*\(/);
+});
+
+test("direct primitive edits preserve IDs, transforms and feature references", () => {
+  for (const kind of ["box", "sphere", "cylinder", "cone"] as const) {
+    const d = blankDesign(),
+      b = createBody(kind),
+      c = createBody("cylinder");
+    b.rotation = [15, 30, 60];
+    d.bodies = [b, c];
+    d.features = [createBoolean("difference", [b.id, c.id])];
+    const code = workspaceCodeForDesign(d),
+      target = structuredClone(d);
+    target.bodies[0].size = kind === "sphere" ? [40, 40, 40] : [40, 40, 25];
+    target.bodies[0].position = [10, 20, 30];
+    const edited = workspaceCodeForDesign(target);
+    assert.deepEqual(nativeCodeRoundTrip(d, code, edited), target, kind);
+  }
+});
+
+test("unsupported code stays in Code without mesh substitution", async () => {
+  const { designFromCode } = await import("../src/studio/workspace-code");
+  const code = workspaceCodeForDesign(blankDesign());
+  code.params.sources[0].content = "module part(){cube(10);}part();";
+  await assert.rejects(
+    () =>
+      designFromCode(
+        code,
+        async () => new Uint8Array(),
+        undefined,
+        undefined,
+        new AbortController().signal,
+      ),
+    /cannot yet be edited as native visual shapes/,
   );
-  assert.doesNotMatch(
-    code.params.sources[0].content!,
-    /ignored|unused-library/,
-  );
-  assert.match(
-    code.params.sources.find((f) => f.path === "/code/sub/part.scad")!.content!,
-    /declared in the generated scene entry/,
-  );
-  assert.equal(
-    code.params.sources.find((f) => f.path === "/unused.scad")!.content,
-    "use <unused-library.scad>",
-  );
-  assert.deepEqual(b.codeProject, original);
+});
+
+test("legacy module migration ignores comments and string literals", async () => {
+  const { hasGeneratedModules } = await import("../src/studio/workspace-code"),
+    code = workspaceCodeForDesign(blankDesign());
+  code.params.sources[0].content =
+    '// module n0() {}\necho("module n1()"); cube(10);';
+  assert.equal(hasGeneratedModules(code), false);
+  code.params.sources[0].content = "module n0() {cube(10);} n0();";
+  assert.equal(hasGeneratedModules(code), true);
 });

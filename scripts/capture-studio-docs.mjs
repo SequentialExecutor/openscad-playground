@@ -445,6 +445,12 @@ async function captureFirstPart(page, click, frame) {
   await page.keyboard.press("A");
   await page.keyboard.up("Control");
   await page.keyboard.sendCharacter(edited);
+  await frame();
+  // Monaco may indent a pasted block; verify its actual text is durably saved.
+  const inserted = await page.evaluate(() =>
+    window.monaco.editor.getEditors()[0].getValue(),
+  );
+  assert.ok(inserted.includes("cube([70,40,6]"));
   await page.waitForFunction(
     (edited) =>
       new Promise((resolve) => {
@@ -467,7 +473,7 @@ async function captureFirstPart(page, click, frame) {
         };
       }),
     { timeout: 20000 },
-    edited,
+    inserted,
   );
   await Promise.all([
     page.waitForNavigation({ waitUntil: "load" }),

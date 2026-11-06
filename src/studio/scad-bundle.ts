@@ -1,10 +1,11 @@
 import JSZip from "jszip";
-import { Design, generateScad } from "./document";
+import { Design } from "./document";
+import { generateReadableScad } from "./readable-scad";
 import { meshInfo } from "./mesh-asset";
 export async function encodeScadBundle(
   design: Design,
 ): Promise<{ data: Uint8Array<ArrayBuffer>; type: string; name: string }> {
-  const source = generateScad(design),
+  const source = generateReadableScad(design),
     assets = design.meshAssets.filter((a) =>
       source.includes(`import("meshes/${a.id}.stl"`),
     );

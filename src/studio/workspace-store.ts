@@ -1,3 +1,4 @@
+import { hasMeshBodies, importedCodeReason } from "./readable-scad";
 import type { State } from "../state/app-state";
 import { Design, validateDesign } from "./document";
 import { verifyMeshAssets } from "./mesh-asset";
@@ -103,6 +104,7 @@ export async function openWorkspaceCode(
   code: WorkspaceCode,
   prior?: WorkspaceRecord,
 ): Promise<WorkspaceRecord> {
+  if (hasMeshBodies(visual)) throw Error(importedCodeReason);
   const record: WorkspaceRecord = {
     id: prior?.id ?? crypto.randomUUID(),
     revision: (prior?.revision ?? -1) + 1,

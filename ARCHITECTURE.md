@@ -55,8 +55,9 @@ validation pipeline. Source download bypasses geometry evaluation by design.
 1. A versioned, serializable document in millimeters is authoritative. Typed
    feature nodes use stable IDs and explicit input references. Validate finite
    parameters, units, graph cycles, missing references and bounded asset sizes
-   at every import boundary. Imported SCAD remains opaque, with supported
-   explicit parameters; never infer a complete history from arbitrary source.
+   at every import boundary. Native visual editing emits direct OpenSCAD, not
+   opaque object wrappers. Unsupported SCAD stays in Code; never infer a complete
+   history from arbitrary source. Any mesh body disables switching to Code.
 2. Commands update the document and implement undo/redo transactions. A drag
    records one command; cancellation restores its initial transform. Camera and
    selection state are separate from geometry history.
@@ -311,13 +312,19 @@ exact saved feature flags and uses final geometry instead of `$preview`.
 `scad-roundtrip.ts` tokenizes a conservative SCAD subset without executing
 JavaScript. Unchanged programs preserve the native graph. Generated primitive
 updates are accepted only when regenerated tokens match the edited source.
-Other code goes through isolated exact evaluation, independently of the Code
-preview/export cache. Schema 6 stores a validated `codeProject` on the resulting
-mesh body, with source files, customizer values and dependency references.
-`workspace-code.ts` reconstructs a scene that includes these retained programs
-inside a dedicated helper module called through the body's visual transforms.
-The helper resets curve defaults to the original OpenSCAD defaults, and its
-module body can contain included module definitions. Reachable local `use`
-declarations lift to the scene entry because OpenSCAD permits them only at top
-level; comment/string contents and unused files remain untouched. Source and
-dependency collisions fail explicitly. Native containers remain v1/v2; schema 1–5 documents migrate to 6.
+`readable-scad.ts` expands the feature DAG into direct, formatted expressions
+for the editable workspace, read-only SCAD panel and SCAD download. Primitive
+parameters expose real dimensions; identity transforms are omitted. Private
+`generateScad` module definitions remain an internal worker evaluation format.
+
+`workspace-code.ts` rejects a handoff if any mesh body exists, including hidden
+or consumed inputs; the Studio link and persistence boundary enforce the same
+rule. Unchanged native graphs survive round trips. Direct primitive edits map
+back to existing IDs only when regenerated source matches the whole edited
+program. Existing module-based workspace records retain a migration reader, but
+new visual handoffs emit direct expressions.
+
+Unsupported Code → Visual conversions fail in place instead of creating opaque
+mesh snapshots. Schema-6 `codeProject` metadata is retained for reading older
+projects, whose mesh bodies also disable the Code link. No schema migration or
+stored asset deletion is required for this source-first workflow.

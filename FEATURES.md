@@ -87,11 +87,14 @@ complete. See TESTING.md for exact evidence and ARCHITECTURE.md for the roadmap.
 
 ## Linked visual and Code workspaces
 
-- Both workspace links synchronize the current model and assets before navigation.
+- Native shapes synchronize between visual modeling and direct OpenSCAD expressions.
 - Unchanged native graphs survive round trips; generated primitive dimensions
   and transforms map back to existing native bodies.
-- General SCAD renders into an exact mesh with editable original source retained
-  in native projects; visual transforms and features wrap that program in Code.
+- Editable source uses actual `cube`, `sphere`, `cylinder`, boolean and pattern
+  expressions without generated object modules or aliases.
+- Any mesh body blocks switching to Code, including hidden and consumed inputs.
+- Unsupported source stays in Code without automatic mesh substitution. Legacy
+  mesh/source metadata remains readable in native projects.
 - Local saves survive reloads, syntax failures preserve code, and revision checks
   prevent stale tabs from silently overwriting newer shared work.
 

@@ -163,6 +163,7 @@ describe("Linked visual and Code workspaces", () => {
     const original = await native();
     const code = await toCode();
     expect(code).toContain("cube([40,30,20]");
+    expect(code).not.toMatch(/\bmodule\b|\bn\d+\s*\(/);
     expect(new URL(page.url()).searchParams.has("workspace")).toBe(true);
     await edit(code.replace("cube([40,30,20]", "cube([60,30,20]"));
     await page.reload();
@@ -192,76 +193,55 @@ describe("Linked visual and Code workspaces", () => {
     await toVisual();
     expect((await native()).bodies[0].position[0]).toBe(12);
   }, 150000);
-  test("unchanged native meshes and mechanical parameters survive both workspace links", async () => {
-    const file = path.resolve("examples/forma3d/imported-mesh.forma3d");
-    await (await page.$('input[aria-label="Project file"]')).uploadFile(file);
+  test("imported meshes block Code even as hidden or consumed operands, and deleting them restores access", async () => {
+    await (
+      await page.$('input[aria-label="Project file"]')
+    ).uploadFile(path.resolve("examples/forma3d/imported-mesh.forma3d"));
     await page.waitForSelector('button[aria-label="Select Imported cube"]');
     const before = await native();
+    const link = 'header a[role="link"]';
+    expect(await page.$eval(link, (e) => e.getAttribute("aria-disabled"))).toBe(
+      "true",
+    );
+    expect(await page.$eval(link, (e) => e.getAttribute("href"))).toBeNull();
+    await page.click(link);
+    await page.waitForFunction(() =>
+      document
+        .querySelector("footer")
+        ?.textContent.includes("Code workspace unavailable"),
+    );
+    expect(new URL(page.url()).searchParams.get("studio")).toBe("1");
+    expect((await native()).features).toEqual(before.features);
+    await page.click('button[aria-label="Toggle visibility Imported cube"]');
+    expect(await page.$eval(link, (e) => e.getAttribute("aria-disabled"))).toBe(
+      "true",
+    );
+    await page.click(`button[aria-label="Select ${before.features[0].name}"]`);
+    await click("Remove boolean");
+    await page.click('button[aria-label="Select Imported cube"]');
+    await click("Delete");
+    expect(await page.$eval(link, (e) => e.getAttribute("aria-disabled"))).toBe(
+      "false",
+    );
     const code = await toCode();
-    expect(code).toContain('import("meshes/');
-    await page.waitForFunction(
-      () => document.querySelector("model-viewer.main-viewer")?.src,
-    );
-    await toVisual();
-    const after = await native();
-    expect(after.bodies.map((b) => b.id)).toEqual(
-      before.bodies.map((b) => b.id),
-    );
-    expect(after.features).toEqual(before.features);
-    expect(after.meshAssets).toEqual(before.meshAssets);
-    expect(mesh(await download("Export exact STL")).volume).toBeCloseTo(
-      874.53806234,
-      2,
-    );
-  }, 150000);
-  test("complex SCAD retains editable source through visual transforms and native save/open", async () => {
+    expect(code).toContain("cylinder(");
+    expect(code).not.toMatch(/\bmodule\b|\bimport\s*\(/);
+  }, 90000);
+  test("unsupported code remains editable in Code instead of becoming an opaque mesh", async () => {
     await click("＋ box");
     await toCode();
     const custom =
-      "// custom stepped shape\nmodule step(w){cube([w,10,5]);}\nfor(i=[0:2]) translate([i*15,0,0]) step(10);";
+      "module step(w){cube([w,10,5]);} for(i=[0:2]) translate([i*15,0,0]) step(10);";
     await edit(custom);
-    await toVisual();
-    await page.click('button[aria-label="Select SCAD model"]');
-    await page.waitForSelector('section[aria-label="Linked SCAD source"]');
-    expect(mesh(await download("Export exact STL")).volume).toBeCloseTo(
-      1500,
-      2,
-    );
-    await numeric("position X", 7);
-    const p = await native();
-    expect(
-      p.bodies[0].codeProject.files.some((f) => f.content?.includes(custom)),
-    ).toBe(true);
-    fs.writeFileSync(
-      path.join(temp, "source.forma3d"),
-      await download("Save project"),
-    );
-    page.once("dialog", (d) => d.accept());
-    await click("New");
-    await (
-      await page.$('input[aria-label="Project file"]')
-    ).uploadFile(path.join(temp, "source.forma3d"));
-    await page.waitForSelector('button[aria-label="Select SCAD model"]');
-    await page.click('button[aria-label="Select SCAD model"]');
-    const code = await toCode();
-    expect(code).toContain("include </");
-    expect(code).toContain("translate([7,0,0])");
-    await page.waitForFunction(
-      () =>
-        document.querySelector("model-viewer.main-viewer")?.src ||
-        window.monaco.editor.getModelMarkers({}).some((m) => m.severity === 8),
-    );
-    expect(
-      await page.evaluate(() =>
-        window.monaco.editor
-          .getModelMarkers({})
-          .filter((m) => m.severity === 8)
-          .map((m) => m.message),
+    await page.click('a[href="?studio=1"]');
+    await page.waitForFunction(() =>
+      document.body.textContent.includes(
+        "cannot yet be edited as native visual shapes",
       ),
-    ).toEqual([]);
-    await toVisual();
-    expect(mesh(await download("Export exact STL")).min[0]).toBe(7);
-  }, 180000);
+    );
+    expect(new URL(page.url()).searchParams.has("studio")).toBe(false);
+    expect(await source()).toBe(custom);
+  }, 90000);
   test("invalid code cannot overwrite the visual design, and a corrected source can still switch", async () => {
     await click("＋ box");
     const original = await native(),
@@ -316,58 +296,99 @@ describe("Linked visual and Code workspaces", () => {
       await second.close();
     }
   }, 150000);
-  test("included source files, customizer values and default curve tessellation survive visual wrapping", async () => {
-    await page.waitForFunction(() =>
-      document.querySelector("footer")?.textContent.includes("Saved locally"),
-    );
-    const state = {
-      params: {
-        activePath: "/model.scad",
-        sources: [
-          {
-            path: "/model.scad",
-            content:
-              "use </parts/piece.scad>\nwidth=10;\nfor(i=[0:1]) translate([i*30,0,0]) piece(width);",
-          },
-          {
-            path: "/parts/piece.scad",
-            content: "module piece(w){cylinder(r=w/2,h=10);}",
-          },
-        ],
-        vars: { width: 12 },
-        features: [],
-        exportFormat2D: "svg",
-        exportFormat3D: "stl",
-      },
-      view: {
-        layout: {
-          mode: "multi",
-          editor: true,
-          viewer: true,
-          customizer: false,
-        },
-        color: "#f9d72c",
-      },
-    };
-    await page.goto(`${base}#${encodeURIComponent(JSON.stringify(state))}`);
-    expect(await source()).toContain("use </parts/piece.scad>");
-    await toVisual();
-    await page.click('button[aria-label="Select SCAD model"]');
-    const before = mesh(await download("Export exact STL"));
-    await numeric("position X", 3);
-    const code = await toCode();
+  test("native patterns expose direct for/translate/cube code without generated modules", async () => {
+    await click("＋ box");
+    await numeric("Width (mm)", 10);
+    await numeric("Depth (mm)", 10);
+    await numeric("Height (mm)", 10);
+    await numeric("position X", 30);
+    await numeric("position Z", 5);
+    await page.click(".studio-modeling summary");
+    await click("Circular pattern");
     await page.waitForFunction(
-      () => document.querySelector("model-viewer.main-viewer")?.src,
+      () =>
+        [...document.querySelectorAll(".studio-legend")].some((e) =>
+          e.textContent.includes("Exact geometry up to date"),
+        ),
       { timeout: 60000 },
     );
-    await edit(code + "\n// Rebuild this wrapped source\n");
+    const before = await native(),
+      volume = mesh(await download("Export exact STL")).volume;
+    const code = await toCode();
+    expect(code).toContain("for(i=");
+    expect(code).toContain("rotate(");
+    expect(code).toContain("cube([10,10,10]");
+    expect(code).not.toMatch(/\bmodule\b|\bn\d+\s*\(/);
+    await page.waitForFunction(
+      () => document.querySelector("model-viewer.main-viewer")?.loaded,
+      { timeout: 60000 },
+    );
+    expect(mesh(await download("Download STL")).volume).toBeCloseTo(volume, 3);
     await toVisual();
-    const after = mesh(await download("Export exact STL"));
-    expect(after.volume).toBeCloseTo(before.volume, 3);
-    expect(after.min[0]).toBeCloseTo(before.min[0] + 3, 4);
-    const p = await native();
-    expect(
-      p.bodies[0].codeProject.files.some((f) => f.path === "/parts/piece.scad"),
-    ).toBe(true);
-  }, 180000);
+    const after = await native();
+    expect(after.features).toEqual(before.features);
+    expect(mesh(await download("Export exact STL")).volume).toBeCloseTo(
+      volume,
+      3,
+    );
+  }, 120000);
+  test("direct curved primitives retain exact scaled/rotated geometry and real dimensions in Code", async () => {
+    await click("＋ cylinder");
+    await numeric("Diameter (mm)", 20);
+    await numeric("Depth (mm)", 10);
+    await numeric("Height (mm)", 12);
+    await numeric("rotation Z", 30);
+    await numeric("scale X", 1.5);
+    const expected = mesh(await download("Export exact STL"));
+    const code = await toCode();
+    expect(code).toContain("cylinder(h=12, d=20, center=true)");
+    expect(code).not.toContain("module ");
+    await page.waitForFunction(
+      () => document.querySelector("model-viewer.main-viewer")?.loaded,
+      { timeout: 60000 },
+    );
+    const actual = mesh(await download("Download STL"));
+    expect(actual.volume).toBeCloseTo(expected.volume, 2);
+    actual.size.forEach((v, i) => expect(v).toBeCloseTo(expected.size[i], 4));
+  }, 90000);
+  test("older generated-module workspaces reopen with direct native expressions", async () => {
+    await click("＋ box");
+    await toCode();
+    const old =
+      "$fn=64;\nmodule n0() { translate([0,0,10]) rotate([0,0,0]) scale([1,1,1]) cube([20,20,20], center=true); }\nn0();\n";
+    await page.evaluate(
+      (old) =>
+        new Promise((resolve, reject) => {
+          const q = indexedDB.open("forma3d-studio", 1);
+          q.onsuccess = () => {
+            const db = q.result,
+              tx = db.transaction("projects", "readwrite"),
+              store = tx.objectStore("projects"),
+              key =
+                "workspace:" +
+                new URLSearchParams(location.search).get("workspace"),
+              r = store.get(key);
+            r.onsuccess = () => {
+              const w = r.result;
+              w.code.params.sources[0].content = old;
+              w.baseline = structuredClone(w.code);
+              w.revision++;
+              store.put(w, key);
+            };
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+          };
+        }),
+      old,
+    );
+    await page.reload();
+    expect(await source()).toContain("module n0()");
+    await toVisual();
+    const direct = await toCode();
+    expect(direct).toContain("cube([20,20,20]");
+    expect(direct).not.toMatch(/\bmodule\b|\bn\d+\s*\(/);
+  }, 90000);
 });

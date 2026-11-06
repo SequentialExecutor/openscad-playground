@@ -127,9 +127,11 @@ not guaranteed. Geometry evaluation runs locally in the browser worker.
 
 The Code workspace also includes a **Forma3D Studio · Visual Design** link.
 Both workspace links synchronize the current design before switching. Native
-primitive edits remain editable visual objects; complex SCAD becomes an exact
-source-backed mesh with its original code retained. The Generated SCAD panel
-remains read-only; use **Open Code workspace** for editing. See the
+primitive edits remain editable visual shapes, expressed directly as OpenSCAD
+primitives and operations without generated object modules. Any mesh body disables
+the Visual Design → Code link, even when hidden or consumed by a feature.
+Unsupported code remains in Code rather than being converted into an opaque mesh.
+The Generated SCAD panel remains read-only; use **Open Code workspace** for editing. See the
 [round-trip workflow and limits](USER_GUIDE.md#switch-between-visual-modeling-and-code).
 Shared workspace URLs are local to this browser; use native downloads to move
 projects between browsers.
