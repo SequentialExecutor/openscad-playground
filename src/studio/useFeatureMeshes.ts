@@ -12,13 +12,19 @@ export function useFeatureMeshes(design: Design, selected?: string) {
   const cache = useRef(new Map<string, ArrayBuffer>());
   const roots = rootNodes(design).filter(
     (node) =>
-      "inputs" in node || node.kind === "extrusion" || node.kind === "template",
+      "inputs" in node ||
+      node.kind === "extrusion" ||
+      node.kind === "template" ||
+      node.kind === "module",
   );
   const operand = [...design.bodies, ...design.features].find(
     (n) =>
       n.id === selected &&
       n.visible &&
-      ("inputs" in n || n.kind === "extrusion" || n.kind === "template"),
+      ("inputs" in n ||
+        n.kind === "extrusion" ||
+        n.kind === "template" ||
+        n.kind === "module"),
   );
   if (operand && !roots.some((n) => n.id === operand.id)) roots.push(operand);
   const sources = roots.map((node) => ({

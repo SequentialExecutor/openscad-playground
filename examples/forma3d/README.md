@@ -1,3 +1,12 @@
+# Reusable flower modules
+
+[flower-modules.scad](flower-modules.scad) contains the authored `petal`, `ring`,
+`bud`, and `stem` definitions. Paste them into Code and return to Visual Design
+to review library imports. Definitions alone add no visible geometry. Insert
+`petal` with its defaults, or fill `ring`'s eight required parameters as described
+in the [module-library guide](../../USER_GUIDE.md#reusable-code-modules). Sibling
+dependencies are bundled; imported triangle geometry is not used.
+
 # First-part tutorial
 
 Open [first-part.forma3d](first-part.forma3d) to explore the part built in the

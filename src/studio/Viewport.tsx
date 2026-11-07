@@ -192,6 +192,7 @@ export default function Viewport(props: ViewportProps) {
       );
       for (const b of latest.current.design.bodies.filter(
         (b) =>
+          b.kind !== "module" &&
           b.kind !== "extrusion" &&
           b.kind !== "template" &&
           b.kind !== "mesh" &&

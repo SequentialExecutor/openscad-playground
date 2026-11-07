@@ -1,0 +1,9 @@
+.studio-module-review { font: 15px/1.5 system-ui, sans-serif; }
+.studio-module-review h2 { margin: 0 0 12px; font-size: 22px; }
+.studio-module-choice { padding: 12px; margin: 10px 0; background: #142032; border: 1px solid #40546e; border-radius: 5px; }
+.studio-module-choice label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.studio-module-choice input[type=checkbox] { width: auto; }
+.studio-module-choice summary { cursor: pointer; margin-top: 6px; color: #b5d9fa; }
+.studio-module-review button { background: #293c55; color: #e5edf8; border: 1px solid #6482a5; border-radius: 5px; padding: 9px 12px; margin: 10px 8px 0 0; font: inherit; cursor: pointer; }
+.studio-module-review button:hover { background: #395675; }
+.studio-module-review pre { background: #0e1725; padding: 12px; font-size: 13px; }

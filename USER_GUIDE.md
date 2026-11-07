@@ -22,6 +22,7 @@ application and evaluated geometry. Button positions may wrap on smaller screens
 - [Mechanical templates](#mechanical-templates)
 - [Import mesh geometry](#import-mesh-geometry)
 - [Switch between visual modeling and Code](#switch-between-visual-modeling-and-code)
+- [Reusable code modules](#reusable-code-modules)
 - [Keyboard and mouse controls](#keyboard-and-mouse-controls)
 - [Troubleshooting](#troubleshooting)
 - [Example projects and terminology](#example-projects-and-terminology)
@@ -405,7 +406,7 @@ assets totaling 20 MB of normalized binary STL. JSON metadata remains limited to
 2 MB; mesh-backed native archives are capped at 25 MB. Large files/assemblies may
 need simplification before importing.
 
-Mesh-backed projects use native container version 2 and document schema 6, with
+Mesh-backed projects use native container version 2 and document schema 7, with
 separate SHA-256-checked mesh files. Older valid projects migrate automatically.
 Undo/redo, duplication, locking, visibility and recovery preserve asset references.
 Unused mesh assets are removed when validating the document after body deletion.
@@ -452,8 +453,9 @@ transforms retain editable objects and their IDs. Simple standalone primitive
 and boolean code can also become native visual objects. Native SCAD is generated
 again after visual edits, so formatting and parameter expressions may change.
 
-Generated source uses direct OpenSCAD primitives and operations, without generated
-object modules or `n0()` aliases. For example, the first part is expressed as:
+Ordinary native shapes use direct OpenSCAD primitives and operations, without
+automatic object wrappers. Modules that you author in Code, or explicitly save
+from a shape, are preserved and can be reused through the module library. For example, the first part is expressed as:
 
 ```scad
 $fn=64;
@@ -469,10 +471,11 @@ Cylinders use their actual diameter and height; spheres use their actual diamete
 An elliptical shape adds an explicit scale. Patterns expose `for`, `translate`
 and `rotate`; sketches expose their profile and extrusion operations.
 
-Code outside the supported native-editing subset stays in Code with an
-explanation. It is **not** converted into an opaque mesh object to force a visual
-handoff. Your source remains intact. Unchanged generated code can return to its
-existing native graph; unsupported structural edits must remain in Code.
+Self-contained authored modules can return to Visual Design as source-preserving
+module instances. Their definitions and calls remain visible in Code; no opaque
+mesh asset replaces them. Ordinary native shapes keep their existing editing
+controls when unchanged. Unsupported non-module code and external dependencies
+remain in Code with an explanation, preserving the source.
 Generated editable source is limited to 1 MB. The original standalone Code editor
 still supports its broader OpenSCAD workflows.
 
@@ -484,6 +487,111 @@ sharing links. Keep `.forma3d` downloads as portable backups. Opening the plain
 Code URL starts the original standalone source workflow.
 
 
+
+## Reusable code modules
+
+A code module is an explicit exception to the no-wrapper rule: it is a named
+OpenSCAD definition that you wrote or chose to save. Native primitives still
+appear directly as `cube`, `sphere`, `cylinder` and normal operations.
+**Imported meshes remain excluded from Code and cannot be saved as code modules.**
+A module's evaluated preview is derived from its source; it is not an imported
+triangle asset.
+
+### Paste modules in Code and review them on return
+
+1. Save a project backup, then choose **Open Code workspace**.
+2. Paste one or more module definitions. Try the supplied
+   [petal, ring, bud and stem definitions](examples/forma3d/flower-modules.scad).
+   You can append definitions to an existing scene, or replace the scene with
+   definitions only. Definitions alone do not create visible geometry.
+3. Choose **Forma3D Studio · Visual Design**. The app checks the module syntax
+   and offers **Save detected code modules to your library?**
+4. Review the names and expand a source/dependencies preview if needed. New
+   modules start checked. Changed existing entries start **unchecked**, so updates
+   require an explicit choice.
+5. Choose **Save selected modules and return**, **Return without saving**, or
+   **Cancel return**. Cancel leaves your text in Code. Skipping the library save
+   still preserves authored definitions in the current project.
+
+![Review detected authored modules before saving them](docs/images/module-import-review.png)
+
+Sibling dependencies are bundled: importing `ring` retains its `petal`
+definition, even if you choose not to save `petal` as a separate library entry.
+The library detects semantic definition and dependency changes. Opening an old
+project without editing its code does not silently roll a newer library entry
+back to that project's older snapshot.
+
+### Insert a saved module into any project
+
+1. Choose **New**, or open the project where you want to use the module.
+2. Expand **Module library** in the left panel and choose **Library module**.
+3. Fill required parameters. Optional fields show the source default as a
+   placeholder; leave them empty to use it. Values are SCAD expressions: `18`,
+   `sin(30)*2`, `"text"`, or `[0.55,0.05,0.45]`, for example.
+4. Click **Insert module**, wait for **Exact geometry up to date**, and choose
+   **Fit all**. The source's original coordinate system is retained.
+5. Select the instance in Objects to change its parameters, position, rotation,
+   or scale. Parameter edits and insertion participate in project Undo/Redo.
+
+For `petal`, try `len=18` and leave the other fields at their defaults. `bud` and
+`stem` need no arguments. `stem` extends downward from its authored origin; use
+**Place on build plate** if you want its lowest point at Z=0.
+
+For `ring`, supply all eight required values:
+
+| Parameter | Example value |
+| --- | --- |
+| n | 8 |
+| radius | 10 |
+| len | 12 |
+| base_r | 2.8 |
+| tilt | 30 |
+| z | 0 |
+| phase | 0 |
+| col | [0.55,0.05,0.45] |
+
+![Library parameters and an editable authored petal instance](docs/images/module-library.png)
+
+The Code workspace contains the original definitions and ordinary invocations,
+for example `petal(len=18);`. Authored `color()` commands remain in source; the
+visual geometry viewport uses the app's selection colors.
+
+![Authored module definition and its call remain readable in Code](docs/images/authored-module-code.png)
+
+### Save a visual shape as a module
+
+Select a body or feature result, expand **Module library**, enter a valid
+**Module name** such as `my_bracket`, and choose **Save selected as module**.
+This explicit action creates a module definition containing that result's current
+transform and code dependencies. Boolean operands remain represented in its code.
+A selected result that depends on an imported mesh cannot be saved as a code
+module. If the name already exists, confirm **Replace library module** or cancel.
+Use a different name when the selected shape itself depends on that module name.
+
+### Keep projects stable and back up the library
+
+Inserted instances keep the source they were inserted with. Editing a library
+entry later does **not** change existing projects. Native `.forma3d` files carry
+all the module definitions and calls they need, so they remain usable in a browser
+where the library is empty. Use Code to edit a project's own definitions; returning
+from Code offers eligible new or changed modules for an optional library update.
+
+The library is local to this browser profile and site address. Choose **Export
+module library** to download its JSON backup. Use **Import library backup** in a
+new browser/site to restore it, reviewing new names and updates before importing.
+Project Undo/Redo does not undo library saves; keep backups before replacing entries.
+If another tab changes the library during review, the save is rejected so that
+newer work is not overwritten. Refresh and review again.
+
+Modules must be self-contained. Sibling modules, helper functions and global
+bindings are retained, but external `include`, `use`, `import` and `surface`
+dependencies are not accepted for the library/visual module workflow. Definitions
+must not shadow built-in shapes or operations. Conflicting same-name definitions
+or globals are reported when combining bundles; rename or unify them in Code
+rather than expecting a silent replacement. Required arguments must be supplied.
+The library supports up to 200 entries, 256 KB per entry and 2 MB of source total;
+project source remains bounded to 1 MB. Evaluation errors preserve your editable
+source and project. General modules do not acquire an invented sketch history.
 
 ## Keyboard and mouse controls
 
@@ -523,6 +631,8 @@ around the origin when you rotate its result.
 | An import is rejected | Check format support, embedded resources, units and the size/triangle limits above. Unsupported input leaves the current design intact. |
 | Autosave is paused or fails | Download **Save project** immediately. Check browser storage; keep the downloaded backup before reloading. |
 | Code is unavailable after import | Remove every mesh body, including hidden/consumed operands, to restore Code access. Native shapes appear as direct OpenSCAD expressions. |
+| A module import/update is not offered | Existing matching library definitions need no import. Only relevant new/changed definitions are offered; new definitions without calls can still be saved. |
+| An authored instance reports an evaluation error | Check required arguments, helper definitions and globals. The source remains editable in Code; 2D-only modules need an explicit extrusion before solid output. |
 | A Code switch fails | Read the message and correct the current source or unsupported input. Your code remains available; the visual document is not replaced by a failed conversion. |
 | Another-tab conflict is reported | Download the current tab's source/project before reopening the workspace containing the newer work. |
 | A workspace URL does not work in another browser | It refers to local data. Transfer a `.forma3d` file and use **Open project** instead. |
@@ -538,6 +648,7 @@ Download the native file, then choose **Open project**. On GitHub, use the file'
 
 | Example | Practice |
 | --- | --- |
+| [Flower modules](examples/forma3d/flower-modules.scad) | Paste the authored `petal`, `ring`, `bud`, and `stem` definitions into Code, then review/save them into the library. |
 | [First part](examples/forma3d/first-part.forma3d) | Follow this guide's 60 × 40 × 6 mm plate and 8 mm hole. |
 | [Editable boolean hole](examples/forma3d/editable-hole.forma3d) | Change the cylinder diameter inside a 50 mm cube. |
 | [Sketch plate](examples/forma3d/sketch-plate.forma3d) | Edit the constrained sketch and watch its dependent hole recompute. |

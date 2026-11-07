@@ -1,3 +1,5 @@
+import { ModuleImportReview, ModuleChoice } from "../studio/ModuleImportReview";
+import type { LibraryEntry } from "../studio/module-library";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { ModelContext, FSContext } from "./contexts";
 import { isMcpMode } from "../state/mcp-mode";
@@ -16,6 +18,13 @@ export default function WorkspaceLink({
         ? "Shared code saved locally."
         : "",
     );
+  const [moduleReview, setModuleReview] = useState<{
+    choices: ModuleChoice[];
+    resolve: (entries: LibraryEntry[] | null) => void;
+  }>();
+  const reviewResolver = useRef<
+    ((entries: LibraryEntry[] | null) => void) | undefined
+  >(undefined);
   const abort = useRef<AbortController | undefined>(undefined);
   const current = useRef(model?.state.params);
   current.current = model?.state.params;
@@ -29,6 +38,7 @@ export default function WorkspaceLink({
       window.removeEventListener("forma3d-workspace-save", onSave);
       window.removeEventListener("forma3d-workspace-error", onError);
       abort.current?.abort();
+      reviewResolver.current?.(null);
     };
   }, []);
   if (!model || !fs || isMcpMode()) return null;
@@ -41,7 +51,7 @@ export default function WorkspaceLink({
     abort.current = controller;
     try {
       const [
-        { designFromCode, codeSignature },
+        { designFromCode, codeSignature, sourceWithCodeVariables },
         {
           getWorkspaceSession,
           WorkspaceSession,
@@ -69,6 +79,74 @@ export default function WorkspaceLink({
         session?.record.baseline,
         controller.signal,
       );
+      const { parseAuthoredProgram, canonicalScad } = await import(
+        "../studio/authored-scad"
+      );
+      const source = sourceWithCodeVariables(snapshot);
+      const program = parseAuthoredProgram(source);
+      if (program.declarations.some((d) => d.kind === "module")) {
+        const { validateModuleSyntax } = await import(
+          "../studio/module-syntax"
+        );
+        await validateModuleSyntax(snapshot, controller.signal);
+        const { loadModuleLibrary, detectedLibraryEntries, saveModuleLibrary } =
+          await import("../studio/module-library");
+        const library = await loadModuleLibrary();
+        let choices = detectedLibraryEntries(
+          source,
+          library,
+          session
+            ? sourceWithCodeVariables(session.record.baseline)
+            : undefined,
+        );
+        // Do not offer historical automatic worker aliases as authored library entries.
+        if (session && !session.record.visual.authoredSource) {
+          const { generateScad } = await import("../studio/document");
+          const baseline =
+            session.record.baseline.params.sources.find(
+              (f) => f.path === session!.record.baseline.params.activePath,
+            )?.content ?? "";
+          if (
+            canonicalScad(baseline) ===
+            canonicalScad(generateScad(session.record.visual))
+          ) {
+            const old = parseAuthoredProgram(baseline).declarations;
+            choices = choices.filter(
+              (c) =>
+                !old.some(
+                  (d) =>
+                    d.kind === "module" &&
+                    d.name === c.entry.name &&
+                    program.declarations.some(
+                      (p) =>
+                        p.kind === "module" &&
+                        p.name === d.name &&
+                        canonicalScad(p.source) === canonicalScad(d.source),
+                    ),
+                ),
+            );
+          }
+        }
+        if (choices.length) {
+          const selected = await new Promise<LibraryEntry[] | null>(
+            (resolve) => {
+              reviewResolver.current = resolve;
+              setModuleReview({ choices, resolve });
+              controller.signal.addEventListener("abort", () => resolve(null), {
+                once: true,
+              });
+            },
+          );
+          reviewResolver.current = undefined;
+          setModuleReview(undefined);
+          if (selected === null) throw Error("Workspace switch canceled.");
+          if (codeSignature({ params: current.current! }) !== signature)
+            throw Error(
+              "Code changed during review. Switch again to review its current modules.",
+            );
+          if (selected.length) await saveModuleLibrary(library, selected);
+        }
+      }
       if (controller.signal.aborted) throw Error("Workspace switch canceled.");
       if (codeSignature({ params: current.current! }) !== signature)
         throw Error(
@@ -85,6 +163,8 @@ export default function WorkspaceLink({
       setStatus(`Workspace switch failed: ${error}`);
     } finally {
       abort.current = undefined;
+      reviewResolver.current = undefined;
+      setModuleReview(undefined);
       setBusy(false);
       onBusyChange?.(false);
     }
@@ -102,6 +182,14 @@ export default function WorkspaceLink({
       >
         Forma3D Studio · Visual Design ↗
       </a>
+      {moduleReview && (
+        <ModuleImportReview
+          choices={moduleReview.choices}
+          onSave={(entries) => moduleReview.resolve(entries)}
+          onSkip={() => moduleReview.resolve([])}
+          onCancel={() => moduleReview.resolve(null)}
+        />
+      )}
       {busy && (
         <button
           onClick={() => abort.current?.abort()}

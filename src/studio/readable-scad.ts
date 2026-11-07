@@ -1,3 +1,4 @@
+import { parseAuthoredProgram } from "./authored-scad";
 import { Body, Design, rootNodes, validateDesign } from "./document";
 import { modelingScad } from "./advanced";
 import { templateScad } from "./templates";
@@ -14,6 +15,9 @@ export function hasMeshBodies(d: Design): boolean {
 export function readableBodyScad(b: Body): string {
   let solid: string;
   switch (b.kind) {
+    case "module":
+      solid = b.moduleCall!.expression;
+      break;
     case "box":
       solid = `cube(${JSON.stringify(b.size)}, center=true);`;
       break;
@@ -90,7 +94,7 @@ function formatScad(source: string): string {
   return text;
 }
 
-export function generateReadableScad(input: Design): string {
+export function generateReadableScad(input: Design, roots?: string[]): string {
   const d = validateDesign(input),
     nodes = new Map([...d.bodies, ...d.features].map((n) => [n.id, n]));
   const emit = (id: string): string => {
@@ -100,11 +104,16 @@ export function generateReadableScad(input: Design): string {
     return `${n.operation}() {\n${n.inputs.map(emit).join("\n")}\n}`;
   };
   return (
-    "// Forma3D Studio — millimeters\n$fn=64;\n\n" +
-    formatScad(
-      rootNodes(d)
-        .map((n) => emit(n.id))
-        .join("\n\n"),
+    (d.authoredSource?.startsWith("// Forma3D Studio — millimeters")
+      ? ""
+      : "// Forma3D Studio — millimeters\n") +
+    (d.authoredSource &&
+    parseAuthoredProgram(d.authoredSource).declarations.some(
+      (d) => d.kind === "variable" && d.name === "$fn",
     )
+      ? ""
+      : "$fn=64;\n") +
+    (d.authoredSource ? "\n" + d.authoredSource + "\n\n" : "\n") +
+    formatScad((roots ?? rootNodes(d).map((n) => n.id)).map(emit).join("\n\n"))
   );
 }

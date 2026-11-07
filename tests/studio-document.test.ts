@@ -88,7 +88,7 @@ test("compiler is deterministic, uses millimeters, honors transforms and omits h
     );
 });
 
-test("version 1 primitive files migrate losslessly to version 6", () => {
+test("version 1 primitive files migrate losslessly to version 7", () => {
   const original = {
     version: 1,
     name: "Old project",
@@ -96,7 +96,7 @@ test("version 1 primitive files migrate losslessly to version 6", () => {
     bodies: [createBody("box")],
   };
   const migrated = validateDesign(original);
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.deepEqual(migrated.features, []);
   assert.deepEqual(migrated.bodies, original.bodies);
 });

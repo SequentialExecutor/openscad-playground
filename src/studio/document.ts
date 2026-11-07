@@ -1,3 +1,8 @@
+import {
+  validateAuthoredSource,
+  validateModuleExpression,
+  parseAuthoredProgram,
+} from "./authored-scad";
 import { CodeProject, validateCodeProject } from "./code-project";
 import {
   MeshAsset,
@@ -38,7 +43,8 @@ export type Shape = "box" | "sphere" | "cylinder" | "cone";
 export interface Body {
   id: string;
   name: string;
-  kind: Shape | "extrusion" | "template" | "mesh";
+  kind: Shape | "extrusion" | "template" | "mesh" | "module";
+  moduleCall?: { expression: string };
   meshAssetId?: string;
   codeProject?: CodeProject;
   meshSource?: { format: MeshFormat; units: MeshUnit };
@@ -62,7 +68,8 @@ export interface BooleanFeature {
 export type Feature = BooleanFeature | ModelingFeature;
 export type Transformable = Body | ModelingFeature;
 export interface Design {
-  version: 6;
+  version: 7;
+  authoredSource?: string;
   meshAssets: MeshAsset[];
   name: string;
   units: "mm";
@@ -76,7 +83,7 @@ export interface History {
   future: Design[];
 }
 export const blankDesign = (): Design => ({
-  version: 6,
+  version: 7,
   meshAssets: [],
   features: [],
   print: structuredClone(defaultPrintSettings),
@@ -103,15 +110,15 @@ export function validateDesign(input: unknown): Design {
   const raw = input as { version?: unknown };
   const d = (
     raw.version === 1
-      ? { ...input, version: 6, features: [], meshAssets: [] }
+      ? { ...input, version: 7, features: [], meshAssets: [] }
       : raw.version === 2 || raw.version === 3 || raw.version === 4
-        ? { ...input, version: 6, meshAssets: [] }
-        : raw.version === 5
-          ? { ...input, version: 6 }
+        ? { ...input, version: 7, meshAssets: [] }
+        : raw.version === 5 || raw.version === 6
+          ? { ...input, version: 7 }
           : input
   ) as Design;
   if (
-    d.version !== 6 ||
+    d.version !== 7 ||
     !Array.isArray(d.meshAssets) ||
     d.meshAssets.length > 32 ||
     d.units !== "mm" ||
@@ -132,6 +139,10 @@ export function validateDesign(input: unknown): Design {
     throw Error("Duplicate mesh assets or project mesh data exceeds 20 MB.");
   const print = d.print === undefined ? defaultPrintSettings : d.print;
   validatePrintSettings(print);
+  const authoredSource =
+    d.authoredSource === undefined
+      ? undefined
+      : validateAuthoredSource(d.authoredSource);
   const ids = new Set<string>();
   for (const b of d.bodies) {
     if (
@@ -144,6 +155,7 @@ export function validateDesign(input: unknown): Design {
         "extrusion",
         "template",
         "mesh",
+        "module",
       ].includes(b.kind) ||
       typeof b.id !== "string" ||
       !b.id ||
@@ -161,6 +173,16 @@ export function validateDesign(input: unknown): Design {
       for (const file of p.files)
         if (file.meshAssetId && !assets.has(file.meshAssetId))
           throw Error("Linked SCAD has a missing mesh dependency.");
+    }
+    if (b.kind === "module") {
+      if (
+        !authoredSource ||
+        !parseAuthoredProgram(authoredSource).declarations.some(
+          (d) => d.kind === "module",
+        )
+      )
+        throw Error("Authored module body is missing its declarations.");
+      validateModuleExpression(b.moduleCall?.expression!);
     }
     ids.add(b.id);
     if (
@@ -294,7 +316,8 @@ export function validateDesign(input: unknown): Design {
       );
   // Strip unrecognized fields so imported data cannot alter runtime-only state.
   return {
-    version: 6,
+    version: 7,
+    ...(authoredSource ? { authoredSource } : {}),
     meshAssets: meshAssets.filter((a) =>
       d.bodies.some(
         (b) =>
@@ -337,6 +360,13 @@ export function validateDesign(input: unknown): Design {
             : b.kind === "template"
               ? templateSize(b.template!)
               : [...b.size],
+      ...(b.kind === "module"
+        ? {
+            moduleCall: {
+              expression: validateModuleExpression(b.moduleCall!.expression),
+            },
+          }
+        : {}),
       ...(b.codeProject
         ? { codeProject: validateCodeProject(b.codeProject) }
         : {}),
@@ -413,6 +443,8 @@ export function rootNodes(d: Design): (Body | Feature)[] {
 export function generateScad(design: Design, roots?: string[]): string {
   const d = validateDesign(design);
   const nodes = [...d.bodies, ...d.features];
+  let prefix = d.authoredSource ? "forma3d_node_" : "n";
+  while (d.authoredSource?.includes(prefix)) prefix += "_";
   const byId = new Map(nodes.map((node, index) => [node.id, { node, index }]));
   const output = roots ?? rootNodes(d).map((node) => node.id);
   const used = new Set<string>();
@@ -427,31 +459,40 @@ export function generateScad(design: Design, roots?: string[]): string {
   const definitions = nodes
     .filter((node) => used.has(node.id))
     .map((node) => {
-      const name = `n${byId.get(node.id)!.index}`;
+      const name = `${prefix}${byId.get(node.id)!.index}`;
       if ("inputs" in node && "spec" in node)
-        return `module ${name}() { ${modelingScad(d, node, (id) => `n${byId.get(id)!.index}();`)} }`;
+        return `module ${name}() { ${modelingScad(d, node, (id) => `${prefix}${byId.get(id)!.index}();`)} }`;
       if ("inputs" in node)
-        return `module ${name}() { ${node.operation}() { ${node.inputs.map((id) => `n${byId.get(id)!.index}();`).join(" ")} } }`;
+        return `module ${name}() { ${node.operation}() { ${node.inputs.map((id) => `${prefix}${byId.get(id)!.index}();`).join(" ")} } }`;
       const b = node;
       const solid =
-        b.kind === "mesh"
-          ? `import("meshes/${b.meshAssetId}.stl",convexity=10);`
-          : b.kind === "template"
-            ? templateScad(b.template!)
-            : b.kind === "extrusion"
-              ? extrusionScad(b.extrusion!)
-              : b.kind === "box"
-                ? `cube(${JSON.stringify(b.size)}, center=true);`
-                : b.kind === "sphere"
-                  ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
-                  : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
+        b.kind === "module"
+          ? b.moduleCall!.expression
+          : b.kind === "mesh"
+            ? `import("meshes/${b.meshAssetId}.stl",convexity=10);`
+            : b.kind === "template"
+              ? templateScad(b.template!)
+              : b.kind === "extrusion"
+                ? extrusionScad(b.extrusion!)
+                : b.kind === "box"
+                  ? `cube(${JSON.stringify(b.size)}, center=true);`
+                  : b.kind === "sphere"
+                    ? `scale(${JSON.stringify(b.size.map((n) => n / 2))}) sphere(r=1);`
+                    : `scale([${b.size[0] / 2},${b.size[1] / 2},1]) cylinder(h=${b.size[2]},r1=1,r2=${b.kind === "cone" ? 0 : 1},center=true);`;
       return `module ${name}() { translate(${JSON.stringify(b.position)}) rotate(${JSON.stringify(b.rotation)}) scale(${JSON.stringify(b.scale)}) ${solid} }`;
     });
   return (
-    "// Forma3D Studio — millimeters\n$fn=64;\n" +
+    "// Forma3D Studio — millimeters\n" +
+    (d.authoredSource &&
+    parseAuthoredProgram(d.authoredSource).declarations.some(
+      (d) => d.kind === "variable" && d.name === "$fn",
+    )
+      ? ""
+      : "$fn=64;\n") +
+    (d.authoredSource ? d.authoredSource + "\n" : "") +
     definitions.join("\n") +
     "\n" +
-    output.map((id) => `n${byId.get(id)!.index}();`).join("\n") +
+    output.map((id) => `${prefix}${byId.get(id)!.index}();`).join("\n") +
     "\n"
   );
 }

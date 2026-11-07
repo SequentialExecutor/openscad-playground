@@ -208,7 +208,7 @@ test("direct primitive edits preserve IDs, transforms and feature references", (
 test("unsupported code stays in Code without mesh substitution", async () => {
   const { designFromCode } = await import("../src/studio/workspace-code");
   const code = workspaceCodeForDesign(blankDesign());
-  code.params.sources[0].content = "module part(){cube(10);}part();";
+  code.params.sources[0].content = 'import("shape.stl");';
   await assert.rejects(
     () =>
       designFromCode(

@@ -1,3 +1,4 @@
+import ModuleLibraryPanel, { ModuleCallInspector } from "./ModuleLibraryPanel";
 import {
   generateReadableScad,
   hasMeshBodies,
@@ -259,7 +260,7 @@ export default function Studio() {
       const code =
         prior &&
         JSON.stringify(snapshot) === JSON.stringify(prior.visual) &&
-        !hasGeneratedModules(prior.code)
+        (!!snapshot.authoredSource || !hasGeneratedModules(prior.code))
           ? prior.code
           : workspaceCodeForDesign(snapshot);
       const record = await openWorkspaceCode(snapshot, code, prior);
@@ -804,6 +805,15 @@ export default function Studio() {
               </button>
             ))}
           </div>
+          <ModuleLibraryPanel
+            design={design}
+            selected={selected}
+            onCommit={(next) => {
+              commit(next);
+              setSelected(next.bodies.at(-1)?.id);
+            }}
+            onStatus={setStatus}
+          />
           <BooleanTools
             nodes={nodes}
             onCreate={(operation, inputs) => {
@@ -1048,9 +1058,11 @@ export default function Studio() {
                   ? "sketch origin"
                   : body.kind === "template"
                     ? "template origin (base Z=0)"
-                    : body.kind === "mesh"
-                      ? "source mesh origin"
-                      : "centered origin"}
+                    : body.kind === "module"
+                      ? "authored module origin"
+                      : body.kind === "mesh"
+                        ? "source mesh origin"
+                        : "centered origin"}
                 {body.locked ? " • locked" : ""}
               </p>
               {body.codeProject && (
@@ -1110,7 +1122,16 @@ export default function Studio() {
                   </p>
                 </fieldset>
               )}
-              {body.kind !== "template" &&
+              {body.kind === "module" && (
+                <ModuleCallInspector
+                  key={body.id}
+                  body={body}
+                  design={design}
+                  onChange={changeBody}
+                />
+              )}
+              {body.kind !== "module" &&
+                body.kind !== "template" &&
                 body.kind !== "extrusion" &&
                 body.kind !== "mesh" && (
                   <fieldset disabled={body.locked || !!draft}>

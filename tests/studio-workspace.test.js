@@ -231,7 +231,7 @@ describe("Linked visual and Code workspaces", () => {
     await click("＋ box");
     await toCode();
     const custom =
-      "module step(w){cube([w,10,5]);} for(i=[0:2]) translate([i*15,0,0]) step(10);";
+      'import("shape.stl");';
     await edit(custom);
     await page.click('a[href="?studio=1"]');
     await page.waitForFunction(() =>

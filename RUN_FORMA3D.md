@@ -128,7 +128,8 @@ not guaranteed. Geometry evaluation runs locally in the browser worker.
 The Code workspace also includes a **Forma3D Studio · Visual Design** link.
 Both workspace links synchronize the current design before switching. Native
 primitive edits remain editable visual shapes, expressed directly as OpenSCAD
-primitives and operations without generated object modules. Any mesh body disables
+primitives and operations without automatic object wrappers. Authored code modules
+are supported through the [reusable module library](USER_GUIDE.md#reusable-code-modules). Any mesh body disables
 the Visual Design → Code link, even when hidden or consumed by a feature.
 Unsupported code remains in Code rather than being converted into an opaque mesh.
 The Generated SCAD panel remains read-only; use **Open Code workspace** for editing. See the
@@ -220,7 +221,7 @@ node --import ./server/node_modules/tsx/dist/loader.mjs --test \
   tests/foundation.test.tsx tests/studio-document.test.ts \
   tests/mesh-analysis.test.ts tests/project-file.test.ts tests/sketch.test.ts \
   tests/advanced-modeling.test.ts tests/mesh-import.test.ts \
-  tests/workspace-roundtrip.test.ts
+  tests/workspace-roundtrip.test.ts tests/module-library.test.ts
 ```
 
 On Debian/Ubuntu, install Chromium for browser checks if you skipped Puppeteer's
@@ -303,7 +304,7 @@ cache previous application assets; reload and, if necessary, update/unregister
 that origin's service worker. Avoid clearing site storage before downloading
 recovery data, since it can delete the only local project copy.
 
-Schema-1/2/3/4/5 projects migrate to schema 6. Native containers without mesh assets
+Schema-1/2/3/4/5/6 projects migrate to schema 7. Native containers without mesh assets
 remain version 1; projects with meshes use version 2, embedding SHA-256-checked
 normalized STL assets. The file extension remains `.forma3d`. A SCAD download for
 a mesh-backed model is a ZIP containing `design.scad` and its `meshes/` directory;

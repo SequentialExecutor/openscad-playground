@@ -328,3 +328,26 @@ Unsupported Code → Visual conversions fail in place instead of creating opaque
 mesh snapshots. Schema-6 `codeProject` metadata is retained for reading older
 projects, whose mesh bodies also disable the Code link. No schema migration or
 stored asset deletion is required for this source-first workflow.
+
+## Authored modules and library (schema 7)
+
+`authored-scad.ts` lexes strings/comments and balanced SCAD declarations without
+executing JavaScript. It extracts top-level module signatures, defaults, helper
+functions, global bindings and scene statements; sibling dependency closure
+creates self-contained library bundles. External geometry/file imports and
+built-in module shadowing are rejected. An isolated parse-only OpenSCAD worker
+checks pasted module syntax before the return-to-visual review.
+
+Schema 7 adds project `authoredSource` and source-preserving `module` bodies with
+explicit invocation expressions. Derived viewport STL is transient geometry, not
+a mesh asset. Modules use the existing exact feature cache, transform system,
+booleans and project history. Public SCAD retains authored declarations and calls;
+private evaluation aliases choose names that do not collide with authored names.
+Active Code customizer bindings become explicit project/library bindings.
+
+`module-library.ts` stores a revisioned library under its own IndexedDB key in
+the existing projects store. Imports and updates require review; writes compare
+the read revision and are atomic. Instances embed project source snapshots, so
+library updates cannot silently mutate existing projects. Backups are versioned,
+bounded JSON with validated SCAD bundles. Native container versions remain v1/v2;
+document schemas 1–6 migrate to 7. Previous source-first mesh restrictions remain.

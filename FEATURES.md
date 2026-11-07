@@ -41,7 +41,7 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 - Principal-plane XY/XZ/YZ linear extrusion and dependent boolean recomputation.
   Only closed, nondegenerate, non-self-intersecting profiles may be applied.
 - Applied sketch constraints, extrusion parameters and IDs persist in native
-  projects and autosave. Older schema-1/2/3/4/5 documents migrate to schema 6.
+  projects and autosave. Older schema-1/2/3/4/5/6 documents migrate to schema 7.
 - Non-destructive mirror, linear/circular patterns and groups, with preserved
   inputs, independent result transforms/gizmos and lock controls.
 - Sketch profile offset with round/miter/chamfer joins and rotational extrusion.
@@ -55,7 +55,7 @@ The existing OpenSCAD, embedded and MCP workflows remain available.
 - STL/OBJ and compatible core 3MF/static embedded glTF/GLB geometry import,
   explicit unit confirmation, source placement, bounds/area/topology diagnostics,
   transforms/gizmos and closed-mesh feature/boolean participation.
-- Hash-checked native mesh assets, schema-6 recovery/history, native container v2
+- Hash-checked native mesh assets, schema-7 recovery/history, native container v2
   and portable SCAD-plus-mesh ZIP downloads. Open meshes remain visible/savable;
   unsupported solid operations report explicit errors without guessing a repair.
 - Earlier customizer zero/empty-value and 3MF build-UUID fixes retained.
@@ -99,3 +99,15 @@ complete. See TESTING.md for exact evidence and ARCHITECTURE.md for the roadmap.
   prevent stale tabs from silently overwriting newer shared work.
 
 See [the workflow, supported subset and limits](USER_GUIDE.md#switch-between-visual-modeling-and-code).
+
+## Authored modules and reusable library
+
+- Explicit authored modules are allowed alongside direct native expressions.
+- Returning from Code offers a source/dependency review for new modules and
+  optional updates; cancel and skip preserve source.
+- Browser-local library supports save selected shape, parameterized insertion,
+  reviewed backup import/export and revision-conflict protection.
+- Project snapshots embed declarations and invocations, keeping existing designs
+  stable across library updates; schema 7 migrates earlier projects.
+- Imported mesh bodies still block Code. Module code must be self-contained and
+  cannot import external geometry or shadow native built-in operations.

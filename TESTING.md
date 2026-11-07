@@ -570,3 +570,32 @@ and Undo checks. Its paste verification now accepts Monaco's actual indentation
 while still requiring the edited dimensions, a durable save and correct visual
 results. All 39 local guide/example links, image references and anchors passed
 validation. Existing native projects remain readable; no document schema changed.
+
+## Authored modules and reusable library (schema 7)
+
+The module library adds 14 parser/document tests in `tests/module-library.test.ts`
+and eight real-browser workflows in `tests/studio-modules.test.js`. The supplied
+flower definitions cover default and required parameters, loops, hulls, colors,
+and sibling dependency bundles. Cases also cover comments/strings, user-written
+`n0`, helper functions/globals, repeated assignments, Code customizer bindings,
+source/name conflicts, and external-import rejection.
+
+Browser workflows exercise detection and review, cancel/skip, explicitly selected
+updates, required `ring` arguments, exact STL parameter changes, saving/reusing a
+visual boolean, native project reloads, library backup/restore, and another-tab
+revision conflicts. Authored geometry is evaluated from source without imported
+mesh assets. Existing imported-mesh Code restrictions remain covered.
+
+Screenshots are reproducible after `npm run build` with
+`node scripts/capture-studio-docs.mjs` and
+`node scripts/capture-module-docs.mjs`. Set `PUPPETEER_EXECUTABLE_PATH` when using
+system Chromium. Both scripts capture the running production application; the
+beginner walkthrough also checks exact exported bounds, through-hole volume,
+Code/visual synchronization and Undo.
+
+Validation for this change: TypeScript and the production build passed; all 67
+unit assertions and all 54 Forma3D production browser cases passed (eight suites,
+no skips). The 115 server/MCP assertions and real-browser cross-origin request/CSP
+check also passed. The final browser run used a static production server to avoid
+live-rebuild interference seen in the earlier development run. Both documentation
+capture scripts completed, and all local documentation link/image targets exist.

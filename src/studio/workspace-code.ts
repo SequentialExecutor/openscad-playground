@@ -1,6 +1,8 @@
+import { designWithAuthoredCode } from "./authored-design";
+import { parseAuthoredProgram } from "./authored-scad";
 import type { State } from "../state/app-state";
 import { Design, generateScad, validateDesign } from "./document";
-import { validateCodeProject, MAX_CODE_TEXT } from "./code-project";
+import { validateCodeProject, MAX_CODE_TEXT, scadValue } from "./code-project";
 import {
   importNativeScad,
   updateNativeFromCode,
@@ -18,6 +20,21 @@ export interface WorkspaceCode {
 }
 export function codeSignature(code: WorkspaceCode): string {
   return JSON.stringify(code.params);
+}
+export function sourceWithCodeVariables(code: WorkspaceCode): string {
+  const source =
+    code.params.sources.find((f) => f.path === code.params.activePath)
+      ?.content ?? "";
+  const vars = Object.entries(code.params.vars ?? {});
+  if (vars.some(([name]) => !/^\$?[A-Za-z_][A-Za-z0-9_]*$/.test(name)))
+    throw Error("Invalid Code customizer parameter name.");
+  return (
+    source +
+    (vars.length
+      ? "\n// Active Code customizer values\n" +
+        vars.map(([name, value]) => `${name}=${scadValue(value)};`).join("\n")
+      : "")
+  );
 }
 export function hasGeneratedModules(code: WorkspaceCode): boolean {
   const source =
@@ -122,6 +139,24 @@ export async function designFromCode(
     vars: code.params.vars ?? {},
     features: code.params.features,
   });
+  const source = project.files.find(
+    (f) => f.path === project.entryPath,
+  )!.content!;
+  const authored = parseAuthoredProgram(source);
+  if (authored.declarations.some((d) => d.kind === "module")) {
+    if (project.files.length !== 1)
+      throw Error(
+        "Bundle module dependencies into one self-contained SCAD file before visual editing.",
+      );
+    return {
+      design: designWithAuthoredCode(
+        sourceWithCodeVariables(code),
+        base,
+        baseline ? sourceWithCodeVariables(baseline) : undefined,
+      ),
+      mode: "native",
+    };
+  }
   const native = importNativeScad(project);
   if (native)
     return {

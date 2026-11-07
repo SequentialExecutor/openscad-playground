@@ -443,3 +443,6 @@ body:has(.studio) .github-fork-ribbon {
   min-width: 0;
   font-size: 11px;
 }
+
+.studio-module-library pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; font-size: 12px; }
+.studio-module-library input:not([type="checkbox"]), .studio-module-library select { width: 100%; box-sizing: border-box; }

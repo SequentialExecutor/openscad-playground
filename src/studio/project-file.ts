@@ -177,7 +177,7 @@ export async function decodeProject(data: ArrayBuffer): Promise<Design> {
   const document = JSON.parse(decoder.decode(project));
   if (manifest.version === 2) {
     if (
-      ![5, 6].includes(document.version) ||
+      ![5, 6, 7].includes(document.version) ||
       !Array.isArray(document.meshAssets) ||
       document.meshAssets.length !== meshes.length
     )
